@@ -1,0 +1,21 @@
+{
+  "name": "ai-agent",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm:dev:backend\" \"npm:dev:frontend\"",
+    "dev:backend": "npm --workspace @monorepo/backend run dev",
+    "dev:frontend": "npm --workspace @monorepo/frontend run dev",
+    "build": "npm --workspace @monorepo/frontend run build && npm --workspace @monorepo/backend run build",
+    "start": "node packages/backend/dist/index.js",
+    "format": "prettier --write \"packages/**/*.{js,jsx,ts,tsx,json,css,md}\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.0.0",
+    "typescript": "^5.3.3",
+    "prettier": "^3.3.3"
+  }
+}
