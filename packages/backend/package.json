@@ -9,14 +9,22 @@
     "build": "tsc -p ."
   },
   "dependencies": {
+    "@langchain/core": "^0.3.77",
+    "@langchain/langgraph": "^0.4.9",
+    "@langchain/openai": "^0.6.13",
+    "@monorepo/shared": "1.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.2",
     "express": "^4.18.2",
-    "cors": "^2.8.5"
+    "langchain": "^0.3.34",
+    "openai": "^5.12.2",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
-    "typescript": "^5.3.3",
-    "ts-node-dev": "^2.0.0",
+    "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/node": "^20.0.0",
-    "@types/cors": "^2.8.17"
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.3.3"
   }
 }
