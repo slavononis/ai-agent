@@ -220,6 +220,19 @@ body {
   * {
     @apply border-border outline-ring/50;
   }
+
+  * {
+    --scrollbar-track: transparent;
+    --scrollbar-thumb: hsl(var(--muted-foreground));
+    font-synthesis: none !important;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb, initial)
+      var(--scrollbar-track, initial);
+  }
+
   body {
     @apply bg-background text-foreground;
     letter-spacing: var(--tracking-normal);

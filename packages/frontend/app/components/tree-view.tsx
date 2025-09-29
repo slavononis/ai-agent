@@ -42,14 +42,26 @@ function buildTree(paths: string[]): TreeNode {
 
 // Convert the tree object to the array structure expected by the Tree component
 function convertToArray(tree: TreeNode): TreeItem[] {
-  return Object.keys(tree).map((key: string) => {
-    if (tree[key] === null) {
-      return key; // File
-    } else {
-      const children: TreeItem[] = convertToArray(tree[key] as TreeNode);
-      return [key, ...children]; // Folder with children
-    }
-  });
+  return Object.keys(tree)
+    .sort((a, b) => {
+      const aIsFolder = tree[a] !== null;
+      const bIsFolder = tree[b] !== null;
+
+      // Folders first
+      if (aIsFolder && !bIsFolder) return -1;
+      if (!aIsFolder && bIsFolder) return 1;
+
+      // Alphabetical order within same type
+      return a.localeCompare(b, undefined, { sensitivity: 'base' });
+    })
+    .map((key: string) => {
+      if (tree[key] === null) {
+        return key; // File
+      } else {
+        const children: TreeItem[] = convertToArray(tree[key] as TreeNode);
+        return [key, ...children]; // Folder with children
+      }
+    });
 }
 
 interface TreeViewProps {
@@ -66,7 +78,7 @@ export function TreeView({
   const treeData: TreeItem[] = convertToArray(buildTree(filePaths));
 
   return (
-    <div className="!max-h-[calc(100vh-56px)] p-2 !overflow-auto !overflow-x-hidden">
+    <div className="!max-h-[calc(100vh-108px)] p-2 !overflow-auto !overflow-x-hidden">
       {treeData.map((item: TreeItem, index: number) => (
         <Tree
           key={index}
@@ -105,10 +117,6 @@ function Tree({ item, activeFile, onFileSelect, currentPath }: TreeProps) {
           className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
           onClick={() => onFileSelect?.(fullPath)}
         >
-          {/* <FileIcon
-            extension={name.split('.').pop() || ''}
-            {...(defaultStyles as any)[name.split('.').pop() || '']}
-          /> */}
           <FileIcon filename={name} />
 
           {name}

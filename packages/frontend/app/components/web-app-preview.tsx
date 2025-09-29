@@ -6,17 +6,32 @@ function remapFiles(files: ProjectModel['files']) {
   const sandpackFiles: Record<string, string> = {};
 
   files.forEach((f) => {
-    // Only include frontend files
+    let path = f.path;
+
+    // Remove leading slash if present for Sandpack compatibility
+    if (path.startsWith('/')) {
+      path = path.substring(1);
+    }
+
+    // Handle special files that need to be at root
     if (
-      f.path.endsWith('.tsx') ||
-      f.path.endsWith('.jsx') ||
-      f.path.endsWith('.ts') ||
-      f.path.endsWith('.js') ||
-      f.path.endsWith('.css') ||
-      f.path.endsWith('.html')
+      path === 'package.json' ||
+      path === 'index.html' ||
+      path === 'tailwind.config.js' ||
+      path === 'postcss.config.js' ||
+      path === 'vite.config.ts' ||
+      path === 'tsconfig.json' ||
+      path === 'tsconfig.node.json' ||
+      path === '.gitignore' ||
+      path === '.env.example'
     ) {
-      const path = f.path.startsWith('/') ? f.path : `/${f.path}`;
-      sandpackFiles[path] = f.content;
+      sandpackFiles[`/${path}`] = f.content;
+    } else if (path === 'public/index.html') {
+      // Move public/index.html to root
+      sandpackFiles['/index.html'] = f.content;
+    } else {
+      // All other files go in src
+      sandpackFiles[`/src/${path}`] = f.content;
     }
   });
 
@@ -29,27 +44,50 @@ export default function WebAppPreView({
   files: ProjectModel['files'];
 }) {
   const preparedFiles = remapFiles(files);
+
+  // Extract dependencies from package.json
   const pkgJson = files.find((f) => f.path === 'package.json');
-  const dependencies = pkgJson
-    ? Object.keys(JSON.parse(pkgJson.content).dependencies).reduce(
-        (acc, key) => {
-          acc[key] = JSON.parse(pkgJson.content).dependencies[key];
-          return acc;
-        },
-        {} as Record<string, string>
-      )
-    : {};
+  let dependencies: Record<string, string> = {};
+  let devDependencies: Record<string, string> = {};
+
+  if (pkgJson) {
+    try {
+      const pkg = JSON.parse(pkgJson.content);
+      dependencies = pkg.dependencies || {};
+      devDependencies = pkg.devDependencies || {};
+    } catch (error) {
+      console.error('Error parsing package.json:', error);
+    }
+  }
+
+  // Combine dependencies for Sandpack
+  const allDependencies = {
+    ...dependencies,
+    ...devDependencies,
+    // Ensure required dependencies are included
+    react: dependencies.react || '^18.2.0',
+    'react-dom': dependencies['react-dom'] || '^18.2.0',
+    '@types/react': devDependencies['@types/react'] || '^18.0.24',
+    '@types/react-dom': devDependencies['@types/react-dom'] || '^18.0.9',
+  };
 
   return (
     <Sandpack
-      template="vite-react"
+      template="react-ts"
       files={preparedFiles}
-      customSetup={{ dependencies }}
+      customSetup={{
+        dependencies: allDependencies,
+        environment: 'node' as any,
+      }}
       options={{
         showConsole: true,
-        showNavigator: false,
-        editorHeight: 500,
+        showNavigator: true,
+        showLineNumbers: true,
+        showTabs: true,
+        editorHeight: 'calc(100vh - 58px)',
+        externalResources: ['https://cdn.tailwindcss.com'],
       }}
+      theme="auto"
     />
   );
 }

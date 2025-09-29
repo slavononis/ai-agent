@@ -51,7 +51,7 @@ export function MarkdownCode({ content }: MarkdownRendererProps) {
   return (
     <CodeMirror
       value={content}
-      height="calc(100vh - 56px)"
+      height="calc(100vh - 80px)"
       theme={abyss}
       extensions={Object.values(languageExtensions)}
       editable={false}

@@ -16,6 +16,7 @@ const errorData: ProjectModel = {
 };
 export const getFormattedMessage = (content: string): ProjectModel => {
   try {
+    if (!content) return { name: '', type: '', description: '', files: [] };
     const obj: ProjectModel = JSON.parse(content);
     if (
       typeof obj.name === 'string' &&

@@ -35,8 +35,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <GalleryVerticalEnd className="size-4" />
         </div>
         <div className="flex flex-col gap-0.5 leading-none">
-          <span className="font-semibold">{project.name}</span>
-          <span className="text-sm">v {project.version}</span>
+          <span hidden={!project.name} className="font-semibold">
+            {project.name}
+          </span>
+          <span hidden={!project.version} className="text-sm">
+            v {project.version}
+          </span>
         </div>
       </SidebarHeader>
       <SidebarContent>

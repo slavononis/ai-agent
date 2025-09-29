@@ -16,50 +16,139 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from '@/components/ui/resizable';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { MarkdownCode } from './markdown-code';
 import WebAppPreView from './web-app-preview';
+import { Button } from './ui/button';
+import { cn } from '@/lib/utils';
+import { Code } from 'lucide-react';
+import { FileBtn } from './file-btn';
+import { Input } from './ui/input';
+
 export const Project = () => {
-  const [activeFile, setActiveFile] = useState<string>(
-    'src/components/Button.tsx'
-  );
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const { id } = useParams<{ id: string }>();
-  const { data } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: getChatQueryKey(id!),
     queryFn: () => getProjectDetails({ projectId: id! }),
     enabled: !!id,
   });
+
   const lastAssistantMessage = data?.messages
     ?.slice()
     .reverse()
     .find((msg) => msg.role === Role.AIMessage);
+  const [searchQuery, setSearchQuery] = useState('');
+
   const project = getFormattedMessage(lastAssistantMessage?.content || '');
-  const filePaths = (project.files || []).map((file) => file.path);
+  const filePaths = (project.files || [])
+    .map((file) => file.path)
+    .filter((v) => v.toLowerCase().includes(searchQuery.toLowerCase()));
+  const [activeFile, setActiveFile] = useState<string>(filePaths[0] || '');
+  const [headerButtons, setHeaderButtons] = useState<string[]>(
+    activeFile ? [activeFile] : []
+  );
 
   const activeFileContent =
     project.files?.find((file) => file.path === activeFile)?.content || '';
+
+  // Ensure we always have an active file if tabs exist
+  useEffect(() => {
+    if (!activeFile && headerButtons.length > 0) {
+      setActiveFile(headerButtons[0]);
+    }
+  }, [activeFile, headerButtons]);
+
+  // Ensure first file gets set if project updates
+  useEffect(() => {
+    if (!activeFile && filePaths.length > 0) {
+      setActiveFile(filePaths[0]);
+      setHeaderButtons([filePaths[0]]);
+    }
+  }, [filePaths]);
+
   return (
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset className="overflow-hidden">
         <header className="bg-background border-b group-data-[variant=floating]:border z-50 sticky top-0 flex h-14 shrink-0 items-center gap-2 px-4">
           <SidebarTrigger className="-ml-1" />
+          <Button
+            variant={isPreviewOpen ? 'default' : 'secondary'}
+            size="icon"
+            className={cn('size-7')}
+            onClick={() => setIsPreviewOpen(!isPreviewOpen)}
+          >
+            <Code />
+            <span className="sr-only">Toggle Code</span>
+          </Button>
         </header>
-        {/* <div className="flex flex-col gap-2 p-4"></div> */}
-        <ResizablePanelGroup direction="horizontal">
-          <ResizablePanel defaultSize={25}>
-            <TreeView
-              filePaths={filePaths}
-              activeFile={activeFile}
-              onFileSelect={setActiveFile}
-            />
-          </ResizablePanel>
-          <ResizableHandle />
-          <ResizablePanel defaultSize={75}>
-            <MarkdownCode content={activeFileContent} />
-            {/* <WebAppPreView files={project.files} /> */}
-          </ResizablePanel>
-        </ResizablePanelGroup>
+
+        {!isLoading && (
+          <ResizablePanelGroup direction="horizontal">
+            <ResizablePanel defaultSize={25}>
+              <div className="bg-background flex items-center p-2 sticky top-0 z-40">
+                <Input
+                  // TODO: fix trottling
+                  value={searchQuery}
+                  onInput={(e) => setSearchQuery(e.currentTarget.value)}
+                  placeholder="Search..."
+                />
+              </div>
+              <TreeView
+                filePaths={filePaths}
+                activeFile={activeFile}
+                onFileSelect={(active) => {
+                  setActiveFile(active);
+                  if (!headerButtons.includes(active)) {
+                    setHeaderButtons((prev) => [...prev, active]);
+                  }
+                  setIsPreviewOpen(false);
+                }}
+              />
+            </ResizablePanel>
+            <ResizableHandle />
+            <ResizablePanel defaultSize={75}>
+              {isPreviewOpen || !activeFile ? (
+                <WebAppPreView files={project.files} />
+              ) : (
+                <>
+                  <div className="overflow-x-auto flex items-center h-6 sticky top-0 bg-background z-10 scrollbar-none">
+                    {headerButtons.map((file) => (
+                      <FileBtn
+                        key={file}
+                        title={file}
+                        action={(v) => {
+                          const remaining = headerButtons.filter(
+                            (f) => f !== v
+                          );
+                          if (headerButtons.length === 1) {
+                            return;
+                          }
+                          setHeaderButtons(remaining);
+
+                          if (v === activeFile) {
+                            if (remaining.length > 0) {
+                              setActiveFile(remaining[remaining.length - 1]);
+                              setIsPreviewOpen(false);
+                            }
+                          }
+                        }}
+                        onSelect={(value) => {
+                          setActiveFile(value);
+                          setIsPreviewOpen(false);
+                        }}
+                        active={file === activeFile}
+                      />
+                    ))}
+                  </div>
+
+                  <MarkdownCode content={activeFileContent} />
+                </>
+              )}
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        )}
       </SidebarInset>
     </SidebarProvider>
   );
