@@ -237,4 +237,43 @@ body {
     @apply bg-background text-foreground;
     letter-spacing: var(--tracking-normal);
   }
+  .cm-theme {
+    @apply !rounded-none;
+  }
+  .ͼ3 .cm-panels {
+    @apply !bg-background;
+  }
+
+  .cm-panel.cm-search {
+    @apply bg-popover text-popover-foreground !p-2 shadow-sm font-sans flex items-center;
+  }
+
+  .cm-panel.cm-search .cm-textfield {
+    @apply placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 !border-input min-w-0 rounded-sm border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm 
+         focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[1px];
+  }
+
+  .cm-panel.cm-search .cm-button {
+    @apply cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90 !border-none !rounded-sm !bg-none outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[1px];
+  }
+
+  .cm-panel.cm-search label {
+    @apply inline-flex items-center gap-2 text-sm text-foreground cursor-pointer !font-bold;
+  }
+
+  .cm-panel.cm-search input[type='checkbox'] {
+    @apply w-4 h-4 rounded border border-border bg-input text-primary 
+         focus:ring-[1px] focus:ring-ring focus:outline-none cursor-pointer;
+  }
+  .cm-searchMatch {
+    @apply !bg-accent !text-accent-foreground rounded-xs p-1;
+  }
+
+  .cm-searchMatch-selected {
+    @apply !bg-primary !text-primary-foreground;
+  }
+  .cm-editor .cm-selectionBackground,
+  .cm-editor ::selection {
+    @apply !bg-primary/40; /* semi-transparent theme color */
+  }
 }
