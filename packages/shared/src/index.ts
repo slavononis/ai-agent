@@ -14,7 +14,9 @@ export interface MessageResponseDTO {
   thread_id: string;
   content: string;
   role: Role;
-  structuredData: any;
+  structuredData?: {
+    kwargs?: Kwargs;
+  };
 }
 
 export interface MessagesResponseDTO {

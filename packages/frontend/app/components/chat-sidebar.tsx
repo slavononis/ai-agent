@@ -10,15 +10,18 @@ import {
 import { Chat } from './chat';
 import { useQuery } from '@tanstack/react-query';
 import { getChatQueryKey } from './chat.utils';
-import { getProjectDetails } from '@/services';
+import { getProjectDetails } from '@/services/project';
 import { useParams } from 'react-router';
 import { getFormattedMessage } from '@/utils/chat-formatter';
 import { Role } from '@monorepo/shared';
+import { Mode } from '@/routes/home';
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export function ChatSidebar({
+  ...props
+}: React.ComponentProps<typeof Sidebar>) {
   const { id } = useParams<{ id: string }>();
   const { data } = useQuery({
-    queryKey: getChatQueryKey(id!),
+    queryKey: getChatQueryKey(id!, Mode.Code),
     queryFn: () => getProjectDetails({ projectId: id! }),
     enabled: !!id,
   });
@@ -44,9 +47,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </div>
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup>
-          <Chat />
-        </SidebarGroup>
+        <SidebarGroup>{/* <Chat /> */}</SidebarGroup>
       </SidebarContent>
     </Sidebar>
   );

@@ -2,3 +2,4 @@ node_modules
 dist
 .env
 packages/*/node_modules
+packages/backend/mock-output

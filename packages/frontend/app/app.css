@@ -237,6 +237,10 @@ body {
     @apply bg-background text-foreground;
     letter-spacing: var(--tracking-normal);
   }
+
+  .sp-loading {
+    @apply !bg-background !text-foreground;
+  }
   .cm-theme {
     @apply !rounded-none;
   }

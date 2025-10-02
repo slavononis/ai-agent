@@ -1,15 +1,42 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Textarea } from './ui/textarea';
 import { Button } from './ui/button';
-import { ArrowUp, Loader, Mic, MicOff, Plus, PlusCircle } from 'lucide-react';
+import {
+  ArrowUp,
+  Loader,
+  Mic,
+  MicOff,
+  Plus,
+  File as FileIcon,
+  Image as ImageIcon,
+  X,
+} from 'lucide-react';
 import { Card, CardContent, CardFooter } from './ui/card';
 import SpeechRecognition, {
   useSpeechRecognition,
 } from 'react-speech-recognition';
+
 type ChatInputProps = {
   onSend?: (message: string, files: FileList | null) => void;
   loading?: boolean;
   clearOnSend?: boolean;
+};
+
+function formatBytes(bytes: number) {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+}
+
+const dedupeFiles = (arr: File[]) => {
+  const map = new Map<string, File>();
+  for (const f of arr) {
+    const key = `${f.name}-${f.size}-${f.lastModified}`;
+    if (!map.has(key)) map.set(key, f);
+  }
+  return Array.from(map.values());
 };
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -18,21 +45,30 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   clearOnSend = true,
 }) => {
   const [value, setValue] = useState('');
-  const [files, setFiles] = useState<FileList | null>(null);
+  // Store files internally as an array so we can remove individual ones
+  const [files, setFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
   const {
     transcript,
     listening,
     resetTranscript,
     browserSupportsSpeechRecognition,
   } = useSpeechRecognition();
+
   const handleSendingProcess = () => {
     if (!value.trim() || loading) return;
-    onSend?.(value, files);
+    // Convert File[] -> FileList for onSend compatibility
+    const dt = new DataTransfer();
+    files.forEach((f) => dt.items.add(f));
+    const fileListToSend = dt.files.length ? dt.files : null;
+
+    onSend?.(value, fileListToSend);
+
     if (clearOnSend) {
       setValue('');
-      setFiles(null);
+      setFiles([]);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -47,33 +83,62 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const handleFilesUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      setFiles(files);
+    const list = e.target.files;
+    if (list && list.length > 0) {
+      setFiles((prev) => dedupeFiles([...prev, ...Array.from(list)]));
+
+      setTimeout(() => {
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      }, 0);
     }
   };
+
   const handleAudioRecording = () => {
     if (listening) {
       SpeechRecognition.stopListening();
       resetTranscript();
       return;
     }
-
-    SpeechRecognition.startListening({
-      continuous: true,
-    });
+    SpeechRecognition.startListening({ continuous: true });
   };
+
   const isMobile = /Mobi|Android/i.test(navigator.userAgent);
 
   useEffect(() => {
     if (transcript) {
-      setValue?.(transcript);
+      setValue(transcript);
       autoGrow();
     }
-  }, [transcript, setValue]);
+  }, [transcript]);
+
+  // Create object URLs for image previews
+  const previews = useMemo(
+    () =>
+      files.map((file) => ({
+        file,
+        url: URL.createObjectURL(file),
+        isImage: file.type.startsWith('image/'),
+      })),
+    [files]
+  );
+
+  useEffect(() => {
+    return () => {
+      previews.forEach((p) => URL.revokeObjectURL(p.url));
+    };
+  }, [previews]);
+
+  const removeFileAt = (index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  };
 
   return (
-    <Card>
+    <Card
+      className="w-full [&:has(textarea:focus)]:border-blue-500"
+      onClick={() => textareaRef.current?.focus()}
+    >
       <CardContent>
         <Textarea
           ref={textareaRef}
@@ -90,31 +155,86 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           className="border-none focus-visible:ring-0 max-h-[200px] min-h-[50px] resize-none shadow-none p-0 scrollbar-none"
         />
       </CardContent>
+
       <CardFooter className="gap-2 pt-0 justify-between">
-        <div>
-          <Button
-            size="icon"
-            variant="outline"
-            className="rounded-full"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={loading}
-          >
-            <Plus className="!size-5" />
-          </Button>
-          <input
-            ref={fileInputRef}
-            onChange={handleFilesUpload}
-            type="file"
-            multiple
-            style={{ display: 'none' }}
-          />
+        <div className="min-w-0">
+          <div className="flex items-start gap-2">
+            <Button
+              size="icon"
+              variant="outline"
+              className="rounded-full"
+              onClick={(e) => {
+                e.stopPropagation();
+                fileInputRef.current?.click();
+              }}
+              disabled={loading}
+            >
+              <Plus className="!size-5" />
+            </Button>
+            <input
+              ref={fileInputRef}
+              onChange={handleFilesUpload}
+              type="file"
+              multiple
+              style={{ display: 'none' }}
+            />
+          </div>
+
+          {files.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2 overflow-auto max-h-15">
+              {previews.map(({ file, url, isImage }, idx) => (
+                <div
+                  key={`${file.name}-${file.size}-${file.lastModified}-${idx}`}
+                  className="group relative flex items-center gap-2 rounded-md border bg-muted/40 px-2 py-2"
+                >
+                  <div className="h-10 w-10 flex items-center justify-center overflow-hidden rounded-sm bg-background border">
+                    {isImage ? (
+                      <img
+                        src={url}
+                        alt={file.name}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <FileIcon className="h-5 w-5 text-muted-foreground" />
+                    )}
+                  </div>
+
+                  <div className="min-w-0">
+                    <div className="max-w-[140px] truncate text-xs font-medium">
+                      {file.name}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {formatBytes(file.size)}
+                    </div>
+                  </div>
+
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="ml-auto h-6 w-6 shrink-0 rounded-full opacity-80 hover:opacity-100"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeFileAt(idx);
+                    }}
+                    title="Remove"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
+
         <div className="flex gap-2">
           {browserSupportsSpeechRecognition && (
             <Button
               size="icon"
               variant={listening ? 'destructive' : 'outline'}
-              onClick={handleAudioRecording}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleAudioRecording();
+              }}
               className="rounded-full relative"
               disabled={loading}
             >
@@ -130,7 +250,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           )}
           <Button
             size="icon"
-            onClick={handleSendingProcess}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleSendingProcess();
+            }}
             disabled={loading || !value.trim() || listening}
             className="rounded-full"
           >

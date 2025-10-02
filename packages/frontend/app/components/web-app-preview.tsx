@@ -1,37 +1,31 @@
 import React from 'react';
-import { Sandpack } from '@codesandbox/sandpack-react';
+import {
+  Sandpack,
+  SandpackLayout,
+  SandpackPreview,
+  SandpackProvider,
+} from '@codesandbox/sandpack-react';
 import type { ProjectModel } from '@/utils/chat-formatter';
 
 function remapFiles(files: ProjectModel['files']) {
   const sandpackFiles: Record<string, string> = {};
 
   files.forEach((f) => {
-    let path = f.path;
-
-    // Remove leading slash if present for Sandpack compatibility
-    if (path.startsWith('/')) {
-      path = path.substring(1);
-    }
-
-    // Handle special files that need to be at root
+    // Only include frontend files
     if (
-      path === 'package.json' ||
-      path === 'index.html' ||
-      path === 'tailwind.config.js' ||
-      path === 'postcss.config.js' ||
-      path === 'vite.config.ts' ||
-      path === 'tsconfig.json' ||
-      path === 'tsconfig.node.json' ||
-      path === '.gitignore' ||
-      path === '.env.example'
+      f.path.endsWith('.tsx') ||
+      f.path.endsWith('.jsx') ||
+      f.path.endsWith('.ts') ||
+      f.path.endsWith('.js') ||
+      f.path.endsWith('.css') ||
+      f.path.endsWith('.html')
     ) {
-      sandpackFiles[`/${path}`] = f.content;
-    } else if (path === 'public/index.html') {
-      // Move public/index.html to root
-      sandpackFiles['/index.html'] = f.content;
-    } else {
-      // All other files go in src
-      sandpackFiles[`/src/${path}`] = f.content;
+      let path = f.path.startsWith('/') ? f.path : `/${f.path}`;
+      // if (path.includes('App')) {
+      //   path = path.replace('/src/', '');
+      //   console.log(path, 'here');
+      // }
+      sandpackFiles[path] = f.content;
     }
   });
 
@@ -44,41 +38,48 @@ export default function WebAppPreView({
   files: ProjectModel['files'];
 }) {
   const preparedFiles = remapFiles(files);
-
-  // Extract dependencies from package.json
   const pkgJson = files.find((f) => f.path === 'package.json');
-  let dependencies: Record<string, string> = {};
-  let devDependencies: Record<string, string> = {};
-
-  if (pkgJson) {
-    try {
-      const pkg = JSON.parse(pkgJson.content);
-      dependencies = pkg.dependencies || {};
-      devDependencies = pkg.devDependencies || {};
-    } catch (error) {
-      console.error('Error parsing package.json:', error);
-    }
-  }
-
-  // Combine dependencies for Sandpack
-  const allDependencies = {
-    ...dependencies,
-    ...devDependencies,
-    // Ensure required dependencies are included
-    react: dependencies.react || '^18.2.0',
-    'react-dom': dependencies['react-dom'] || '^18.2.0',
-    '@types/react': devDependencies['@types/react'] || '^18.0.24',
-    '@types/react-dom': devDependencies['@types/react-dom'] || '^18.0.9',
-  };
+  const dependencies = pkgJson
+    ? Object.keys(JSON.parse(pkgJson.content).dependencies).reduce(
+        (acc, key) => {
+          acc[key] = JSON.parse(pkgJson.content).dependencies[key];
+          return acc;
+        },
+        {} as Record<string, string>
+      )
+    : {};
+  const devDependencies = pkgJson
+    ? Object.keys(JSON.parse(pkgJson.content).devDependencies).reduce(
+        (acc, key) => {
+          acc[key] = JSON.parse(pkgJson.content).devDependencies[key];
+          return acc;
+        },
+        {} as Record<string, string>
+      )
+    : {};
+  return (
+    <SandpackProvider template="vite-vue" files={preparedFiles} theme="auto">
+      <SandpackLayout style={{ border: 'none', borderRadius: 0 }}>
+        <SandpackPreview
+          style={{
+            height: 'calc(100vh - 58px)',
+            backgroundColor: 'var(--color-background)',
+          }}
+        />
+      </SandpackLayout>
+    </SandpackProvider>
+  );
 
   return (
     <Sandpack
-      template="react-ts"
+      template="vite-react"
       files={preparedFiles}
-      customSetup={{
-        dependencies: allDependencies,
-        environment: 'node' as any,
-      }}
+      // customSetup={{ dependencies }}
+      // customSetup={{
+      //   dependencies: {
+      //     // '@codesandbox/sandpack-react': '^2.20.0',
+      //   },
+      // }}
       options={{
         showConsole: true,
         showNavigator: true,

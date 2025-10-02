@@ -1,19 +1,32 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import api from './routes/api';
+import project from './routes/project';
+import conversation from './routes/conversation';
+import dbConnect from './lib/mongoDB';
 const app = express();
 const PORT = process.env.PORT || 4000;
 
 app.use(cors());
 app.use(express.json());
+app.use('/api/project', project);
+app.use('/api/conversation', conversation);
 
-app.use('/api', api);
+async function startServer() {
+  try {
+    const client = await dbConnect();
+    await client.db('admin').command({ ping: 1 });
+    console.log(
+      'Pinged your deployment. You successfully connected to MongoDB!'
+    );
 
-app.get('/', (_req, res) =>
-  res.send({ message: 'Monorepo backend is running (TS)' })
-);
+    app.listen(PORT, () => {
+      console.log(`Backend listening on http://localhost:${PORT}`);
+    });
+  } catch (error) {
+    console.error('Error connecting to MongoDB:', error);
+    process.exit(1);
+  }
+}
 
-app.listen(PORT, () => {
-  console.log(`Backend listening on http://localhost:${PORT}`);
-});
+startServer();

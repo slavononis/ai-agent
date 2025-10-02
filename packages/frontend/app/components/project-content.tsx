@@ -2,7 +2,7 @@ import { TreeView } from './tree-view';
 import { useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { getChatQueryKey } from './chat.utils';
-import { getProjectDetails } from '@/services';
+import { getProjectDetails } from '@/services/project';
 import { Role } from '@monorepo/shared';
 import { getFormattedMessage } from '@/utils/chat-formatter';
 import {
@@ -20,9 +20,10 @@ import { MarkdownCode } from './markdown-code';
 import WebAppPreView from './web-app-preview';
 import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
-import { Code } from 'lucide-react';
+import { Code, Search } from 'lucide-react';
 import { FileBtn } from './file-btn';
 import { Input } from './ui/input';
+import { Mode } from '@/routes/home';
 
 export const ProjectContent = () => {
   const { id } = useParams<{ id: string }>();
@@ -31,7 +32,7 @@ export const ProjectContent = () => {
   const [activeFile, setActiveFile] = useState<string>('');
   const [headerButtons, setHeaderButtons] = useState<string[]>([]);
   const { data, isLoading } = useQuery({
-    queryKey: getChatQueryKey(id!),
+    queryKey: getChatQueryKey(id!, Mode.Code),
     queryFn: () => getProjectDetails({ projectId: id! }),
     enabled: !!id,
   });
@@ -83,11 +84,15 @@ export const ProjectContent = () => {
         <ResizablePanelGroup direction="horizontal">
           <ResizablePanel defaultSize={25}>
             <div className="bg-background flex items-center p-2 sticky top-0 z-40">
-              <Input
-                value={searchQuery}
-                onInput={(e) => setSearchQuery(e.currentTarget.value)}
-                placeholder="Search..."
-              />
+              <div className="relative w-full">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                  placeholder="Search..."
+                  className="pl-8" // push text right so it doesn't overlap icon
+                />
+              </div>
             </div>
             <TreeView
               filePaths={filePaths}
@@ -103,8 +108,8 @@ export const ProjectContent = () => {
           </ResizablePanel>
           <ResizableHandle />
           <ResizablePanel defaultSize={75}>
-            {isPreviewOpen || !activeFile ? (
-              <WebAppPreView files={project.files} />
+            {isPreviewOpen ? (
+              <WebAppPreView key={project.version} files={project.files} />
             ) : (
               <>
                 <div className="overflow-x-auto flex items-center h-6 sticky top-0 bg-background z-10 scrollbar-none">

@@ -5,38 +5,42 @@ import {
   END,
   MessagesAnnotation,
   StateGraph,
-  MemorySaver,
 } from '@langchain/langgraph';
 import {
   ChatPromptTemplate,
   MessagesPlaceholder,
 } from '@langchain/core/prompts';
-import { trimMessages } from '@langchain/core/messages'; // Note: Ensure @langchain/core >=0.2.8
+import { trimMessages } from '@langchain/core/messages';
 import { v4 as uuidv4 } from 'uuid';
 import { MessageModelDTO, MessageResponseDTO } from '@monorepo/shared';
+import { MongoDBSaver } from '@langchain/langgraph-checkpoint-mongodb';
+import dbConnect from '../lib/mongoDB';
+import { getFormattedMessage } from '../utils/message-format';
 
-const getFormattedMessage = (
-  msg: any,
-  thread_id: string
-): MessageResponseDTO => {
-  return {
-    id: msg.kwargs.id,
-    thread_id,
-    content: msg.kwargs.content,
-    role: msg.id[2],
-    structuredData: msg.kwargs,
-  };
-};
+let checkpointer: MongoDBSaver;
+
+async function initializeMongoDB() {
+  try {
+    const client = await dbConnect();
+
+    const dbName = 'langgraph-checkpoint-mongodb';
+    checkpointer = new MongoDBSaver({ client, dbName });
+
+    return { client, checkpointer };
+  } catch (error) {
+    console.error('Failed to connect to MongoDB:', error);
+    throw error;
+  }
+}
 
 const llm = new ChatOpenAI({
-  model: 'gpt-4o', // Changed to gpt-4o for larger context; adjust if needed
+  model: 'gpt-4o',
 });
 
 const promptTemplate = ChatPromptTemplate.fromMessages([
   {
     role: 'system',
     content: `You are an **application code generator**.
-
 ## Core Requirements
 - The application must be **fully functional, runnable, and production-ready**.
 - Always return the **full response** as a single JSON object with this structure:
@@ -54,6 +58,7 @@ const promptTemplate = ChatPromptTemplate.fromMessages([
 }}
 
 ## JSON Formatting Rules
+- Do not wrap in \`\`\`json
 - Use proper JSON syntax with double quotes for strings
 - For line breaks in file content, use actual newline characters (not \\n)
 - Escape only what's necessary for valid JSON: double quotes ("), backslashes (\\), and control characters
@@ -110,11 +115,10 @@ Provide a focused change description including:
   new MessagesPlaceholder('messages'),
 ]);
 
-// Trimmer configured properly: Use LLM for actual token counting, higher maxTokens
 const trimmer = trimMessages({
-  maxTokens: 20000, // High enough for your use case; adjust based on model context limit (e.g., 128k for gpt-4o)
+  maxTokens: 20000,
   strategy: 'last',
-  tokenCounter: llm, // Proper token counting using the model (as in docs)
+  tokenCounter: llm,
   includeSystem: true,
   allowPartial: false,
 });
@@ -122,7 +126,7 @@ const trimmer = trimMessages({
 const callModel = async (state: typeof MessagesAnnotation.State) => {
   try {
     const trimmedMessages = await trimmer.invoke(state.messages);
-    console.log('Trimmed Messages (for debugging):', trimmedMessages); // Log to verify what's being passed
+    console.log('Trimmed Messages (for debugging):', trimmedMessages);
     const prompt = await promptTemplate.invoke({ messages: trimmedMessages });
     const response = await llm.invoke(prompt);
 
@@ -138,13 +142,26 @@ const workflow = new StateGraph(MessagesAnnotation)
   .addEdge(START, 'model')
   .addEdge('model', END);
 
-const memorySaver = new MemorySaver();
-const graph = workflow.compile({ checkpointer: memorySaver });
+let graph: ReturnType<(typeof workflow)['compile']>;
+
+// Initialize the graph with checkpointer
+async function initializeGraph() {
+  if (!checkpointer) {
+    await initializeMongoDB();
+  }
+  graph = workflow.compile({ checkpointer });
+  return graph;
+}
 
 async function runMessage(thread_id: string, text: string) {
   try {
+    if (!graph) {
+      await initializeGraph();
+    }
+
     const config = { configurable: { thread_id } };
     const input = { messages: [{ role: 'user', content: text }] };
+
     const output = await graph.invoke(input, config);
     return output.messages[output.messages.length - 1];
   } catch (error) {
@@ -154,6 +171,9 @@ async function runMessage(thread_id: string, text: string) {
 }
 
 const router = Router();
+
+// Initialize MongoDB on startup
+initializeMongoDB().catch(console.error);
 
 router.post('/chat/start', async (req, res) => {
   try {
@@ -168,10 +188,7 @@ router.post('/chat/start', async (req, res) => {
     res.json(data);
   } catch (err: any) {
     console.error('Error in /chat/start:', err);
-    res.status(500).json({
-      error: 'Internal server error',
-      details: process.env.NODE_ENV === 'development' ? err.message : undefined,
-    });
+    res.status(500).json(err);
   }
 });
 
@@ -189,7 +206,7 @@ router.post('/chat/continue', async (req, res) => {
     res.json(data);
   } catch (err: any) {
     console.error('Error in /chat/continue:', err);
-    res.status(500).json({ error: JSON.stringify(err) });
+    res.status(500).json(err);
   }
 });
 
@@ -200,7 +217,15 @@ router.get('/chat/:thread_id', async (req, res) => {
       return res.status(400).json({ error: 'thread_id required' });
     }
 
+    if (!graph) {
+      await initializeGraph();
+    }
+
     const config = { configurable: { thread_id } };
+
+    // Get the state using the checkpointer directly
+    const state = await checkpointer.getTuple(config);
+
     const { values } = await graph.getState(config);
 
     if (!values) {
@@ -215,11 +240,12 @@ router.get('/chat/:thread_id', async (req, res) => {
 
     res.json({
       thread_id,
-      messages,
+      messages: messages,
+      state,
     });
   } catch (err: any) {
     console.error('Error in /chat/:thread_id:', err);
-    res.status(500).json({ error: JSON.stringify(err) });
+    res.status(500).json(err);
   }
 });
 

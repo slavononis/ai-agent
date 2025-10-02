@@ -4,13 +4,9 @@ import {
   type MessagesResponseDTO,
 } from '@monorepo/shared';
 
-export const getProjectDetails = async ({
-  projectId,
-}: {
-  projectId: string;
-}) => {
+export const getChatDetails = async ({ projectId }: { projectId: string }) => {
   return api
-    .get<MessagesResponseDTO>(`/api/chat/${projectId}`)
+    .get<MessagesResponseDTO>(`/api/conversation/chat/${projectId}`)
     .then((res) => res.data)
     .catch((err) => {
       throw err;
@@ -19,7 +15,7 @@ export const getProjectDetails = async ({
 
 export const startChatRequest = async ({ message }: { message: string }) => {
   return api
-    .post<MessageResponseDTO>('/api/chat/start', { message })
+    .post<MessageResponseDTO>('/api/conversation/chat/start', { message })
     .then((res) => res.data)
     .catch((err) => {
       throw err;
@@ -34,7 +30,7 @@ export const continueChatRequest = async ({
   message: string;
 }) => {
   return api
-    .post<MessageResponseDTO>('/api/chat/continue', {
+    .post<MessageResponseDTO>('/api/conversation/chat/continue', {
       thread_id,
       message,
     })

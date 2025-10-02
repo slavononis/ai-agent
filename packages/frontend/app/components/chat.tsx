@@ -2,11 +2,7 @@
 import { useRef, useEffect } from 'react';
 import { ChatInput } from './chat-input';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  continueChatRequest,
-  getProjectDetails,
-  startChatRequest,
-} from '@/services';
+import { continueProjectRequest, getProjectDetails } from '@/services/project';
 import { useParams } from 'react-router';
 import { displayToastError } from '@/helpers/display-toast';
 import { MarkdownRenderer } from './markdown-renderer';
@@ -14,12 +10,17 @@ import { cn } from '@/lib/utils';
 import { Role, type MessagesResponseDTO } from '@monorepo/shared';
 import { getChatQueryKey } from './chat.utils';
 import { getFormattedMessage } from '@/utils/chat-formatter';
+import { Mode } from '@/routes/home';
+import { continueChatRequest, getChatDetails } from '@/services/conversation';
 
-export const Chat = () => {
+type ChatProps = {
+  mode: Mode;
+};
+export const Chat: React.FC<ChatProps> = ({ mode }) => {
   const { id } = useParams();
   const queryClient = useQueryClient();
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
+  const isChatMode = mode === Mode.Chat;
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -28,7 +29,7 @@ export const Chat = () => {
     mutationFn: (message: string) => {
       const tempChatId = `temp-${Date.now().toString()}`;
       queryClient.setQueryData<MessagesResponseDTO>(
-        getChatQueryKey(id!),
+        getChatQueryKey(id!, mode),
         (oldData) => {
           return {
             thread_id: id!,
@@ -45,12 +46,14 @@ export const Chat = () => {
         }
       );
       scrollToBottom();
-
-      return continueChatRequest({ message, thread_id: id! });
+      const reqParams = { message, thread_id: id! };
+      return isChatMode
+        ? continueChatRequest(reqParams)
+        : continueProjectRequest(reqParams);
     },
     onSuccess: (data) => {
       queryClient.setQueryData<MessagesResponseDTO>(
-        getChatQueryKey(id!),
+        getChatQueryKey(id!, mode),
         (oldData) => {
           return {
             thread_id: id!,
@@ -63,7 +66,7 @@ export const Chat = () => {
     onError: () => {
       displayToastError('Failed to send message. Please try again.');
       queryClient.setQueryData<MessagesResponseDTO>(
-        getChatQueryKey(id!),
+        getChatQueryKey(id!, mode),
         (oldData) => {
           return {
             thread_id: id!,
@@ -79,8 +82,11 @@ export const Chat = () => {
   });
 
   const { data } = useQuery({
-    queryKey: getChatQueryKey(id!),
-    queryFn: () => getProjectDetails({ projectId: id! }),
+    queryKey: getChatQueryKey(id!, mode),
+    queryFn: () =>
+      isChatMode
+        ? getChatDetails({ projectId: id! })
+        : getProjectDetails({ projectId: id! }),
     enabled: !!id,
   });
 
@@ -92,19 +98,25 @@ export const Chat = () => {
   }, [data?.messages]);
 
   return (
-    <div className="relative flex h-full w-full flex-1 flex-col">
+    <div
+      className={cn('relative flex h-full w-full flex-1 flex-col', {
+        'max-h-[calc(100vh-56px)]': isChatMode,
+      })}
+    >
       {/* Scrollable message area */}
       <div className="flex-1 overflow-y-auto flex flex-col gap-2 p-2">
         {data?.messages.map((msg, index) => {
           const content =
             msg.role === Role.AIMessage
-              ? getFormattedMessage(msg.content || '').description
+              ? isChatMode
+                ? msg.content
+                : getFormattedMessage(msg.content || '').description
               : msg.content;
           return (
             <div
               key={msg.id || index}
               className={cn('p-4 rounded-lg animate-in', {
-                'bg-blue-600/10': msg.role === Role.AIMessage,
+                'bg-blue-600/10 self-start': msg.role === Role.AIMessage,
                 'bg-blue-100/10 self-end': msg.role === Role.HumanMessage,
               })}
             >
