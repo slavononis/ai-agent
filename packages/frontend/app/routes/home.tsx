@@ -12,12 +12,11 @@ import {
   SelectContent,
   SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
 import { useState } from 'react';
-import { startChatRequest } from '@/services/conversation';
+import { startChatStream } from '@/services/conversation';
 export function meta({}: Route.MetaArgs) {
   return [
     { title: 'New React Router App' },
@@ -36,8 +35,91 @@ export default function Home() {
   const [mode, setMode] = useState<Mode>(Mode.Chat);
   const isChatMode = mode === Mode.Chat;
   const { mutate, isPending } = useMutation({
-    mutationFn: isChatMode ? startChatRequest : startProjectRequest,
+    mutationKey: getChatQueryKey('new-thread', mode),
+    mutationFn: ({ message }: { message: string }) => {
+      const tempChatId = `temp-${Date.now().toString()}`;
+
+      return isChatMode
+        ? startChatStream({
+            message,
+            onChunk: (chunk) => {
+              queryClient.setQueryData<MessagesResponseDTO>(
+                getChatQueryKey(chunk.thread_id!, mode),
+                (oldData) => {
+                  if (!oldData) {
+                    return {
+                      _initialThought: true,
+                      thread_id: chunk.thread_id!,
+                      messages: [
+                        {
+                          id: tempChatId,
+                          thread_id: chunk.thread_id!,
+                          content: message,
+                          role: Role.HumanMessage,
+                        },
+                      ],
+                    };
+                  }
+                  // Get the last message (the one being streamed)
+                  const lastMessage =
+                    oldData?.messages?.[oldData.messages.length - 1];
+
+                  // If this chunk belongs to the last message, append content
+                  if (lastMessage && lastMessage.id === chunk.id) {
+                    const updatedMessages = [...oldData.messages];
+                    updatedMessages[updatedMessages.length - 1] = {
+                      ...lastMessage,
+                      content: lastMessage.content + chunk.content!,
+                    };
+
+                    return {
+                      ...oldData,
+                      messages: updatedMessages,
+                      _initialThought: true,
+                    };
+                  }
+
+                  // Otherwise, create a new message
+                  return {
+                    ...oldData!,
+                    _initialThought: true,
+                    messages: [
+                      ...(oldData?.messages || []),
+                      {
+                        id: chunk.id!,
+                        thread_id: chunk.thread_id!,
+                        content: chunk.content!,
+                        role: chunk.role!,
+                      },
+                    ],
+                  };
+                }
+              );
+            },
+            onThreadId: (threadId) => {
+              navigate(RoutesPath.Chat.replace(':id', threadId));
+            },
+            onError: (error) => {
+              displayToastError(
+                'Failed to start chat. Please try again. Details: ' + error
+              );
+            },
+            onComplete: (thread_id) => {
+              queryClient.setQueryData<MessagesResponseDTO>(
+                getChatQueryKey(thread_id!, mode),
+                (oldData) => {
+                  return {
+                    ...(oldData! || {}),
+                    _initialThought: false,
+                  };
+                }
+              );
+            },
+          })
+        : startProjectRequest({ message });
+    },
     onSuccess: (data, vars) => {
+      if (!data) return;
       const tempChatId = `temp-${Date.now().toString()}`;
       queryClient.setQueryData<MessagesResponseDTO>(
         getChatQueryKey(data.thread_id!, mode),

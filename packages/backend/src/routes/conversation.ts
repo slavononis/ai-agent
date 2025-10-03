@@ -12,7 +12,7 @@ import {
 } from '@langchain/core/prompts';
 import { trimMessages } from '@langchain/core/messages';
 import { v4 as uuidv4 } from 'uuid';
-import { MessageModelDTO, MessageResponseDTO } from '@monorepo/shared';
+import { MessageModelDTO, MessageResponseDTO, Role } from '@monorepo/shared';
 import { MongoDBSaver } from '@langchain/langgraph-checkpoint-mongodb';
 import dbConnect from '../lib/mongoDB';
 import { getFormattedMessage } from '../utils/message-format';
@@ -35,6 +35,7 @@ async function initializeMongoDB() {
 
 const llm = new ChatOpenAI({
   model: 'gpt-5-nano',
+  streaming: true, // Enable streaming
 });
 
 const promptTemplate = ChatPromptTemplate.fromMessages([
@@ -100,6 +101,41 @@ async function runMessage(thread_id: string, text: string) {
   }
 }
 
+// New streaming function
+async function* streamMessage(thread_id: string, text: string) {
+  try {
+    if (!graph) {
+      await initializeGraph();
+    }
+
+    const config = { configurable: { thread_id } };
+    const input = { messages: [{ role: 'user', content: text }] };
+
+    // Stream the graph execution
+    const stream = await graph.stream(input, {
+      ...config,
+      streamMode: 'messages',
+    });
+
+    for await (const [message, metadata] of stream) {
+      // Only yield assistant messages (skip user messages)
+      if (
+        message.constructor.name === Role.AIMessageChunk ||
+        (message as any).type === 'ai'
+      ) {
+        yield {
+          content: message.content,
+          role: Role.AIMessageChunk,
+          id: message.id,
+        };
+      }
+    }
+  } catch (error) {
+    console.error('Error in streamMessage:', error);
+    throw error;
+  }
+}
+
 const router = Router();
 
 // Initialize MongoDB on startup
@@ -107,15 +143,44 @@ initializeMongoDB().catch(console.error);
 
 router.post('/chat/start', async (req, res) => {
   try {
-    const { message } = req.body;
+    const { message, stream = false } = req.body;
     if (!message || typeof message !== 'string') {
       return res.status(400).json({ error: 'Valid message required' });
     }
 
     const thread_id = uuidv4();
-    const reply = await runMessage(thread_id, message);
-    const data = getFormattedMessage(reply.toJSON(), thread_id);
-    res.json(data);
+
+    if (stream) {
+      // Set headers for SSE (Server-Sent Events)
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+
+      // Send thread_id first
+      res.write(
+        `data: ${JSON.stringify({ type: 'thread_id', thread_id })}\n\n`
+      );
+
+      try {
+        for await (const chunk of streamMessage(thread_id, message)) {
+          res.write(
+            `data: ${JSON.stringify({ type: 'chunk', ...chunk, thread_id })}\n\n`
+          );
+        }
+        res.write(`data: ${JSON.stringify({ type: 'done', thread_id })}\n\n`);
+        res.end();
+      } catch (err) {
+        res.write(
+          `data: ${JSON.stringify({ type: 'error', error: 'Stream error' })}\n\n`
+        );
+        res.end();
+      }
+    } else {
+      // Non-streaming response (original behavior)
+      const reply = await runMessage(thread_id, message);
+      const data = getFormattedMessage(reply.toJSON(), thread_id);
+      res.json(data);
+    }
   } catch (err: any) {
     console.error('Error in /chat/start:', err);
     res.status(500).json(err);
@@ -124,16 +189,39 @@ router.post('/chat/start', async (req, res) => {
 
 router.post('/chat/continue', async (req, res) => {
   try {
-    const { thread_id, message } = req.body;
+    const { thread_id, message, stream = false } = req.body;
     if (!thread_id || !message || typeof message !== 'string') {
       return res
         .status(400)
         .json({ error: 'thread_id and valid message required' });
     }
 
-    const reply = await runMessage(thread_id, message);
-    const data = getFormattedMessage(reply.toJSON(), thread_id);
-    res.json(data);
+    if (stream) {
+      // Set headers for SSE
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+
+      try {
+        for await (const chunk of streamMessage(thread_id, message)) {
+          res.write(
+            `data: ${JSON.stringify({ type: 'chunk', ...chunk, thread_id })}\n\n`
+          );
+        }
+        res.write(`data: ${JSON.stringify({ type: 'done', thread_id })}\n\n`);
+        res.end();
+      } catch (err) {
+        res.write(
+          `data: ${JSON.stringify({ type: 'error', error: 'Stream error' })}\n\n`
+        );
+        res.end();
+      }
+    } else {
+      // Non-streaming response (original behavior)
+      const reply = await runMessage(thread_id, message);
+      const data = getFormattedMessage(reply.toJSON(), thread_id);
+      res.json(data);
+    }
   } catch (err: any) {
     console.error('Error in /chat/continue:', err);
     res.status(500).json(err);

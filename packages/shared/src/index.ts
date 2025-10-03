@@ -1,6 +1,7 @@
 export enum Role {
   HumanMessage = 'HumanMessage',
   AIMessage = 'AIMessage',
+  AIMessageChunk = 'AIMessageChunk',
 }
 export interface MessageModelDTO {
   lc: number;
@@ -20,6 +21,7 @@ export interface MessageResponseDTO {
 }
 
 export interface MessagesResponseDTO {
+  _initialThought?: boolean;
   thread_id: string;
   messages: MessageResponseDTO[];
 }
