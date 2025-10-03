@@ -1,5 +1,5 @@
 'use client';
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { ChatInput } from './chat-input';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { continueProjectRequest, getProjectDetails } from '@/services/project';
@@ -12,6 +12,8 @@ import { getChatQueryKey } from './chat.utils';
 import { getFormattedMessage } from '@/utils/chat-formatter';
 import { Mode } from '@/routes/home';
 import { continueChatRequest, getChatDetails } from '@/services/conversation';
+import { Button } from './ui/button';
+import { ChevronDown } from 'lucide-react';
 
 type ChatProps = {
   mode: Mode;
@@ -20,9 +22,23 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
   const { id } = useParams();
   const queryClient = useQueryClient();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const [showScrollButton, setShowScrollButton] = useState(false);
   const isChatMode = mode === Mode.Chat;
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const checkScrollPosition = () => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+
+    // Show button when more than 150px from bottom
+    setShowScrollButton(distanceFromBottom > 150);
   };
 
   const { mutate, isPending } = useMutation({
@@ -97,6 +113,21 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
     }
   }, [data?.messages]);
 
+  // Add scroll event listener to check scroll position
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    container.addEventListener('scroll', checkScrollPosition);
+
+    // Initial check
+    checkScrollPosition();
+
+    return () => {
+      container.removeEventListener('scroll', checkScrollPosition);
+    };
+  }, []);
+
   return (
     <div
       className={cn('relative flex h-full w-full flex-1 flex-col', {
@@ -104,7 +135,10 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
       })}
     >
       {/* Scrollable message area */}
-      <div className="flex-1 overflow-y-auto flex flex-col gap-2 p-2">
+      <div
+        ref={messagesContainerRef}
+        className="flex-1 overflow-y-auto flex flex-col gap-2 p-2"
+      >
         {data?.messages.map((msg, index) => {
           const content =
             msg.role === Role.AIMessage
@@ -125,14 +159,27 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
           );
         })}
         <div ref={messagesEndRef} />
+
+        {/* Scroll to bottom button */}
       </div>
 
       {/* Input stays sticky at bottom */}
       <div className="sticky bottom-0 bg-background p-2">
+        {showScrollButton && (
+          <Button
+            size="icon"
+            onClick={scrollToBottom}
+            className="absolute top-4 right-5.5 z-50 rounded-full animate-bounce"
+            aria-label="Scroll to bottom"
+          >
+            <ChevronDown />
+          </Button>
+        )}
         <ChatInput
           loading={isPending}
           onSend={(prompt, files) => {
             mutate(prompt);
+            console.log(files);
           }}
         />
       </div>

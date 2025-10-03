@@ -152,12 +152,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               handleSendingProcess();
             }
           }}
-          className="border-none focus-visible:ring-0 max-h-[200px] min-h-[50px] resize-none shadow-none p-0 scrollbar-none"
+          className="border-none focus-visible:ring-0 max-h-[200px] min-h-[50px] resize-none shadow-none p-0 scrollbar-none pr-10"
         />
       </CardContent>
 
-      <CardFooter className="gap-2 pt-0 justify-between">
-        <div className="min-w-0">
+      <CardFooter className="gap-2 pt-0 justify-between items-start">
+        <div className="flex gap-2 min-w-0">
           <div className="flex items-start gap-2">
             <Button
               size="icon"
