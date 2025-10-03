@@ -34,7 +34,7 @@ async function initializeMongoDB() {
 }
 
 const llm = new ChatOpenAI({
-  model: 'gpt-5',
+  model: 'gpt-5-nano',
 });
 
 const promptTemplate = ChatPromptTemplate.fromMessages([
@@ -173,6 +173,67 @@ router.get('/chat/:thread_id', async (req, res) => {
     console.error('Error in /chat/:thread_id:', err);
     res.status(500).json(err);
   }
+});
+
+router.get('/chats', async (req, res) => {
+  try {
+    if (!checkpointer) {
+      await initializeMongoDB();
+    }
+
+    const chatMap = new Map<string, { thread_id: string; ts: string }>();
+
+    for await (const {
+      config,
+      checkpoint: { ts },
+    } of checkpointer.list({
+      configurable: {},
+    })) {
+      const threadId = config?.configurable?.thread_id;
+      if (threadId) {
+        // keep only the latest ts per thread
+        if (!chatMap.has(threadId) || chatMap.get(threadId)!.ts < ts) {
+          chatMap.set(threadId, { thread_id: threadId, ts });
+        }
+      }
+    }
+
+    // convert to array and sort by ts desc (latest first)
+    const chats = Array.from(chatMap.values()).sort(
+      (a, b) => (b.ts as any) - (a.ts as any)
+    );
+
+    res.json({ chats });
+  } catch (err: any) {
+    console.error('Error in /chats:', err);
+    res.status(500).json(err);
+  }
+});
+
+router.delete('/chat/:thread_id', async (req, res) => {
+  try {
+    const { thread_id } = req.params;
+    if (!thread_id) {
+      return res.status(400).json({ error: 'thread_id required' });
+    }
+
+    if (!checkpointer) {
+      await initializeMongoDB();
+    }
+
+    await checkpointer.deleteThread(thread_id);
+
+    res.json({ success: true, deleted: thread_id });
+  } catch (err: any) {
+    console.error('Error in DELETE /chat/:thread_id:', err);
+    res.status(500).json(err);
+  }
+});
+
+process.on('SIGINT', async () => {
+  await (await dbConnect()).close();
+
+  process.exit(0);
 });
 
 export default router;

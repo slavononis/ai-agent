@@ -30,6 +30,7 @@
     "@codesandbox/sandpack-react": "^2.20.0",
     "@langchain/anthropic": "^0.3.28",
     "@monorepo/shared": "1.0.0",
+    "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-popover": "^1.1.15",
