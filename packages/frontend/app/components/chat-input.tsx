@@ -136,7 +136,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   return (
     <Card
-      className="w-full [&:has(textarea:focus)]:border-blue-500"
+      className="w-full [&:has(textarea:focus)]:border-blue-500 shadow-[0_4px_12px_rgba(0,0,0,0.1),_0_30px_100px_rgba(192,211,255,0.08)]"
       onClick={() => textareaRef.current?.focus()}
     >
       <CardContent>

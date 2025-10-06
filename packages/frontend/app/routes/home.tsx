@@ -97,6 +97,25 @@ export default function Home() {
               );
             },
             onThreadId: (threadId) => {
+              queryClient.setQueryData<MessagesResponseDTO>(
+                getChatQueryKey(threadId!, mode),
+                (oldData) => {
+                  if (!oldData) {
+                    return {
+                      _initialThought: true,
+                      thread_id: threadId!,
+                      messages: [
+                        {
+                          id: tempChatId,
+                          thread_id: threadId!,
+                          content: message,
+                          role: Role.HumanMessage,
+                        },
+                      ],
+                    };
+                  }
+                }
+              );
               navigate(RoutesPath.Chat.replace(':id', threadId));
             },
             onError: (error) => {

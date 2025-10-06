@@ -3,7 +3,7 @@ import { useRef, useEffect, useState } from 'react';
 import { ChatInput } from './chat-input';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { continueProjectRequest, getProjectDetails } from '@/services/project';
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 import { displayToastError } from '@/helpers/display-toast';
 import { MarkdownRenderer } from './markdown-renderer';
 import { cn } from '@/lib/utils';
@@ -18,6 +18,9 @@ import { Mode } from '@/routes/home';
 import { continueChatStream, getChatDetails } from '@/services/conversation';
 import { Button } from './ui/button';
 import { ChevronDown, Loader } from 'lucide-react';
+import _ from 'lodash';
+import { Skeleton } from './ui/skeleton';
+import { RoutesPath } from '@/utils/routes.config';
 
 type ChatProps = {
   mode: Mode;
@@ -31,9 +34,8 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const isChatMode = mode === Mode.Chat;
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToBottom = (behavior?: ScrollBehavior) => {
+    messagesEndRef.current?.scrollIntoView({ behavior });
   };
 
   const checkScrollPosition = () => {
@@ -166,13 +168,13 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
     },
   });
 
-  const { data } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: getChatQueryKey(id!, mode),
     queryFn: () =>
       isChatMode
         ? getChatDetails({ projectId: id! })
         : getProjectDetails({ projectId: id! }),
-    enabled: !!id,
+    enabled: (enabled) => !enabled.state.data?._initialThought && !!id,
   });
 
   // Scroll down whenever messages change
@@ -196,55 +198,92 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
       container.removeEventListener('scroll', checkScrollPosition);
     };
   }, []);
-  const chatThinking =
-    data?._initialThought || isPending || data?.messages.length === 1;
+
+  const chatThinking = data?._initialThought || isPending;
+
   return (
     <div
       className={cn('relative flex h-full w-full flex-1 flex-col', {
         'max-h-[calc(100vh-56px)]': isChatMode,
       })}
     >
-      {/* Scrollable message area */}
-      <div
-        ref={messagesContainerRef}
-        className="flex-1 overflow-y-auto flex flex-col gap-2 p-2"
-      >
-        {data?.messages.map((msg, index) => {
-          const content = chatRoles.includes(msg.role)
-            ? isChatMode
-              ? msg.content
-              : getFormattedMessage(msg.content || '').description
-            : msg.content;
-          return (
-            <div
-              key={msg.id || index}
-              className={cn('p-4 rounded-lg animate-in', {
-                'bg-blue-600/10 self-start': chatRoles.includes(msg.role),
-                'bg-blue-100/10 self-end': msg.role === Role.HumanMessage,
-              })}
-            >
-              <MarkdownRenderer content={content} />
+      {error ? (
+        <div className="flex flex-col gap-2 h-full w-full p-2 justify-center items-center">
+          <h2 className="text-lg font-semibold">Error</h2>
+          <p className="text-muted-foreground">{error.message}</p>
+          <Link to={RoutesPath.Home} replace>
+            <Button>Home</Button>
+          </Link>
+        </div>
+      ) : isLoading ? (
+        <div className="flex flex-col gap-2 h-full w-full p-2">
+          <Skeleton
+            className="ml-auto h-12 w-full max-w-2xl bg-blue-100/10"
+            style={{ animationDelay: '0.1s' }}
+          />
+          <Skeleton
+            className="h-24 w-full max-w-2xl bg-blue-600/10"
+            style={{ animationDelay: '0.2s' }}
+          />
+          <Skeleton
+            className="ml-auto h-12 w-full max-w-2xl bg-blue-100/10"
+            style={{ animationDelay: '0.3s' }}
+          />
+          <Skeleton
+            className="h-24 w-full max-w-2xl bg-blue-600/10"
+            style={{ animationDelay: '0.4s' }}
+          />
+          <Skeleton
+            className="ml-auto h-12 w-full max-w-2xl bg-blue-100/10"
+            style={{ animationDelay: '0.5s' }}
+          />
+          <Skeleton
+            className="h-24 w-full max-w-2xl bg-blue-600/10"
+            style={{ animationDelay: '0.6s' }}
+          />
+        </div>
+      ) : (
+        <div
+          ref={messagesContainerRef}
+          className="flex-1 overflow-y-auto flex flex-col gap-2 p-2"
+        >
+          {data?.messages.map((msg, index, arr) => {
+            const isAI = chatRoles.includes(msg.role);
+            const content = isAI
+              ? isChatMode
+                ? msg.content
+                : getFormattedMessage(msg.content || '').description
+              : msg.content;
+            return (
+              <div
+                key={msg.id || index}
+                className={cn('p-4 rounded-lg animate-in', {
+                  'bg-blue-600/10': isAI,
+                  'bg-blue-100/10 ml-auto': msg.role === Role.HumanMessage,
+                })}
+              >
+                <MarkdownRenderer content={content} />
+              </div>
+            );
+          })}
+          {chatThinking && (
+            <div className="flex gap-4 animate-pulse bg-muted p-4 rounded-lg self-start">
+              Thinking...{' '}
+              <Loader
+                className="animate-spin"
+                style={{ animationDuration: '2s' }}
+              />
             </div>
-          );
-        })}
-        {chatThinking && (
-          <div className="flex gap-4 animate-pulse bg-muted p-4 rounded-lg self-start">
-            Thinking...{' '}
-            <Loader
-              className="animate-spin"
-              style={{ animationDuration: '2s' }}
-            />
-          </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+      )}
 
-      {/* Input stays sticky at bottom */}
       <div className="sticky bottom-0 bg-background p-2">
         {showScrollButton && (
           <Button
             size="icon"
-            onClick={scrollToBottom}
+            onClick={() => scrollToBottom('smooth')}
             className="absolute top-6 right-5.5 z-50 rounded-full animate-bounce"
             aria-label="Scroll to bottom"
           >

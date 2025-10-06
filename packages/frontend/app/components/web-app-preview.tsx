@@ -58,7 +58,7 @@ export default function WebAppPreView({
       )
     : {};
   return (
-    <SandpackProvider template="vite-vue" files={preparedFiles} theme="auto">
+    <SandpackProvider template="vite-react" files={preparedFiles} theme="auto">
       <SandpackLayout style={{ border: 'none', borderRadius: 0 }}>
         <SandpackPreview
           style={{
