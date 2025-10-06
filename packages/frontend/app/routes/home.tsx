@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/select';
 import { useState } from 'react';
 import { startChatStream } from '@/services/conversation';
+import { setStructuralContent } from '@/utils/chat-formatter';
 export function meta({}: Route.MetaArgs) {
   return [
     { title: 'New React Router App' },
@@ -36,12 +37,13 @@ export default function Home() {
   const isChatMode = mode === Mode.Chat;
   const { mutate, isPending } = useMutation({
     mutationKey: getChatQueryKey('new-thread', mode),
-    mutationFn: ({ message }: { message: string }) => {
+    mutationFn: ({ message, images }: { message: string; images?: File[] }) => {
       const tempChatId = `temp-${Date.now().toString()}`;
 
       return isChatMode
         ? startChatStream({
             message,
+            images,
             onChunk: (chunk) => {
               queryClient.setQueryData<MessagesResponseDTO>(
                 getChatQueryKey(chunk.thread_id!, mode),
@@ -54,7 +56,9 @@ export default function Home() {
                         {
                           id: tempChatId,
                           thread_id: chunk.thread_id!,
-                          content: message,
+                          content: images
+                            ? setStructuralContent(message, images)
+                            : message,
                           role: Role.HumanMessage,
                         },
                       ],
@@ -108,7 +112,9 @@ export default function Home() {
                         {
                           id: tempChatId,
                           thread_id: threadId!,
-                          content: message,
+                          content: images
+                            ? setStructuralContent(message, images)
+                            : message,
                           role: Role.HumanMessage,
                         },
                       ],
@@ -150,7 +156,9 @@ export default function Home() {
               {
                 id: tempChatId,
                 thread_id: data.thread_id!,
-                content: vars.message,
+                content: vars.images
+                  ? setStructuralContent(vars.message, vars.images)
+                  : vars.message,
                 role: Role.HumanMessage,
               },
               data,
@@ -190,7 +198,7 @@ export default function Home() {
           clearOnSend={false}
           loading={isPending}
           onSend={(prompt, files) => {
-            mutate({ message: prompt });
+            mutate({ message: prompt, images: files || undefined });
           }}
         />
       </div>

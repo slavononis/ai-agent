@@ -7,13 +7,13 @@ import { Link, useParams } from 'react-router';
 import { displayToastError } from '@/helpers/display-toast';
 import { MarkdownRenderer } from './markdown-renderer';
 import { cn } from '@/lib/utils';
-import {
-  Role,
-  type MessageResponseDTO,
-  type MessagesResponseDTO,
-} from '@monorepo/shared';
+import { Role, type MessagesResponseDTO } from '@monorepo/shared';
 import { getChatQueryKey } from './chat.utils';
-import { getFormattedMessage } from '@/utils/chat-formatter';
+import {
+  getFormattedMessage,
+  getStructuralContent,
+  setStructuralContent,
+} from '@/utils/chat-formatter';
 import { Mode } from '@/routes/home';
 import { continueChatStream, getChatDetails } from '@/services/conversation';
 import { Button } from './ui/button';
@@ -50,7 +50,7 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
   };
 
   const { mutate, isPending } = useMutation({
-    mutationFn: (message: string) => {
+    mutationFn: ({ message, files }: { message: string; files?: File[] }) => {
       const tempChatId = `temp-${Date.now().toString()}`;
       queryClient.setQueryData<MessagesResponseDTO>(
         getChatQueryKey(id!, mode),
@@ -62,7 +62,7 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
               {
                 id: tempChatId,
                 thread_id: id!,
-                content: message,
+                content: files ? setStructuralContent(message, files) : message,
                 role: Role.HumanMessage,
               },
             ],
@@ -73,6 +73,7 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
       return isChatMode
         ? continueChatStream({
             message,
+            images: files,
             threadId: id!,
             onChunk: (chunk) => {
               queryClient.setQueryData<MessagesResponseDTO>(
@@ -252,7 +253,9 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
             const content = isAI
               ? isChatMode
                 ? msg.content
-                : getFormattedMessage(msg.content || '').description
+                : getFormattedMessage(
+                    typeof msg.content === 'string' ? msg.content : ''
+                  ).description
               : msg.content;
             return (
               <div
@@ -262,7 +265,7 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
                   'bg-blue-100/10 ml-auto': msg.role === Role.HumanMessage,
                 })}
               >
-                <MarkdownRenderer content={content} />
+                <MarkdownRenderer content={getStructuralContent(content)} />
               </div>
             );
           })}
@@ -292,8 +295,8 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
         )}
         <ChatInput
           loading={chatThinking}
-          onSend={(prompt, files) => {
-            mutate(prompt);
+          onSend={(message, files) => {
+            mutate({ message, files: files || undefined });
             console.log(files);
           }}
         />

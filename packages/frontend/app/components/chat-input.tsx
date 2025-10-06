@@ -17,7 +17,7 @@ import SpeechRecognition, {
 } from 'react-speech-recognition';
 
 type ChatInputProps = {
-  onSend?: (message: string, files: FileList | null) => void;
+  onSend?: (message: string, files: File[] | null) => void;
   loading?: boolean;
   clearOnSend?: boolean;
 };
@@ -64,7 +64,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     files.forEach((f) => dt.items.add(f));
     const fileListToSend = dt.files.length ? dt.files : null;
 
-    onSend?.(value, fileListToSend);
+    onSend?.(value, files);
 
     if (clearOnSend) {
       setValue('');

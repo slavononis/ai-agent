@@ -1,3 +1,5 @@
+import type { StructuredContent } from '@monorepo/shared';
+
 export type ProjectModel = {
   name: string;
   type: string;
@@ -35,4 +37,44 @@ export const getFormattedMessage = (content: string): ProjectModel => {
   } catch (error) {
     return errorData;
   }
+};
+
+export const getStructuralContent = (
+  content: string | StructuredContent[]
+): string => {
+  if (typeof content === 'string') return content;
+
+  return content.reduce((acc, curr) => {
+    switch (curr.type) {
+      case 'text':
+        acc += `${curr.text}\n\n` || '';
+        break;
+      case 'image_url':
+        if (curr.image_url?.url) {
+          acc += `![${curr.image_url?.url}](${curr.image_url?.url})`;
+        }
+      default:
+        break;
+    }
+
+    return acc;
+  }, '');
+};
+
+export const setStructuralContent = (
+  content: string,
+  images?: File[]
+): StructuredContent[] => {
+  return [
+    {
+      type: 'text',
+      text: content,
+    },
+    ...(images?.map((image) => ({
+      type: 'image_url' as const,
+      image_url: {
+        url: URL.createObjectURL(image!),
+      },
+    })) ?? []),
+  ];
 };

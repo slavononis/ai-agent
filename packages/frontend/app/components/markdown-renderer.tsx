@@ -1,6 +1,6 @@
 import 'highlight.js/styles/github-dark.css';
 
-import { Check, Copy } from 'lucide-react';
+import { Check, Copy, MessageSquareCode, ScanEye } from 'lucide-react';
 import React, { memo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
@@ -37,8 +37,15 @@ const getTextFromReactNode = (node: React.ReactNode): string => {
   return '';
 };
 
-const _MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
+const CodeRenderer: React.FC<
+  React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>
+> = ({ className, children, ...props }) => {
   const [copied, setCopied] = useState(false);
+  const [viewSvg, setViewSvg] = useState(false);
+
+  const match = /language-(\w+)/.exec(className || '');
+  const language = match ? match?.[1] : '';
+  const isSVG = language === 'svg';
 
   const handleCopy = async (content: React.ReactNode) => {
     try {
@@ -51,8 +58,74 @@ const _MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
     }
   };
 
+  return !language ? (
+    <code
+      {...props}
+      className="border border-color-border bg-primary/10 text-color-accent py-0.5 px-1.5 rounded-md text-xs font-mono whitespace-break-spaces"
+    >
+      {children}
+    </code>
+  ) : (
+    <>
+      <span className="top-[-12px] z-40 flex items-center justify-between w-full sticky border border-color-border border-b-0 rounded-t-md !py-2 !px-3 pb-0 bg-muted/80 text-color-muted-foreground text-xs">
+        <span>{language}</span>
+        <div className="flex gap-2">
+          {isSVG && (
+            <Tooltip>
+              <TooltipTrigger>
+                {viewSvg ? (
+                  <MessageSquareCode
+                    className="size-3"
+                    onClick={() => setViewSvg(false)}
+                  />
+                ) : (
+                  <ScanEye
+                    className="size-3"
+                    onClick={() => setViewSvg(true)}
+                  />
+                )}
+              </TooltipTrigger>
+              <TooltipContent>View Image</TooltipContent>
+            </Tooltip>
+          )}
+
+          <Tooltip>
+            <TooltipTrigger>
+              {copied ? (
+                <Check className="size-3" />
+              ) : (
+                <Copy className="size-3" onClick={() => handleCopy(children)} />
+              )}
+            </TooltipTrigger>
+            <TooltipContent>Copy</TooltipContent>
+          </Tooltip>
+        </div>
+      </span>
+      {viewSvg ? (
+        <span
+          className="block w-full relative border border-color-border border-t-0 rounded-b-md !p-3.5 !bg-background/80 !text-sm !pt-2 mb-2"
+          dangerouslySetInnerHTML={{
+            __html: getTextFromReactNode(children),
+          }}
+        />
+      ) : (
+        <code
+          className={cn(
+            className,
+            'relative border border-color-border border-t-0 rounded-b-md !p-3.5 !bg-background/80 !text-sm !pt-2 mb-2'
+          )}
+          {...props}
+        >
+          {children}
+        </code>
+      )}
+    </>
+  );
+};
+
+const _MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
   return (
-    <div className="overflow-hidden">
+    <div className="overflow-hidden break-words">
       <ReactMarkdown
         children={content}
         remarkPlugins={[remarkGfm, remarkMath]}
@@ -158,54 +231,20 @@ const _MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
               {children}
             </a>
           ),
-          img: ({ node, ...props }) => (
-            <img
-              {...props}
-              className="max-w-full h-auto rounded-md border border-color-border mt-4 mb-2 last:mb-0 shadow-sm"
-              loading="lazy"
-            />
-          ),
-
-          code({ node, className, children, ...props }) {
-            const match = /language-(\w+)/.exec(className || '');
-            const language = match ? match?.[1] : '';
-
-            return !language ? (
-              <code
+          img: ({ node, ...props }) => {
+            return (
+              <img
                 {...props}
-                className="border border-color-border bg-primary/10 text-color-accent py-0.5 px-1.5 rounded-md text-xs font-mono whitespace-break-spaces"
-              >
-                {children}
-              </code>
-            ) : (
-              <>
-                <span className="top-[-12px] z-40 flex items-center justify-between w-full sticky border border-color-border border-b-0 rounded-t-md !py-2 !px-3 pb-0 bg-muted/80 text-color-muted-foreground text-xs">
-                  <span>{language}</span>
-                  <Tooltip>
-                    <TooltipTrigger>
-                      {copied ? (
-                        <Check className="size-3" />
-                      ) : (
-                        <Copy
-                          className="size-3"
-                          onClick={() => handleCopy(children)}
-                        />
-                      )}
-                    </TooltipTrigger>
-                    <TooltipContent>Copy</TooltipContent>
-                  </Tooltip>
-                </span>
-                <code
-                  className={cn(
-                    className,
-                    'relative border border-color-border border-t-0 rounded-b-md !p-3.5 !bg-background/80 !text-sm !pt-2 mb-2'
-                  )}
-                  {...props}
-                >
-                  {children}
-                </code>
-              </>
+                alt={'Image'}
+                src={props.src || props.alt}
+                className="max-w-md h-auto rounded-md border border-color-border mt-4 mb-2 last:mb-0 shadow-sm"
+                loading="lazy"
+              />
             );
+          },
+
+          code({ node, ...props }) {
+            return <CodeRenderer {...props} />;
           },
         }}
       />

@@ -1,4 +1,5 @@
-import { Router } from 'express';
+import { Router, Request } from 'express';
+import multer from 'multer';
 import { ChatOpenAI } from '@langchain/openai';
 import {
   START,
@@ -11,6 +12,7 @@ import {
   MessagesPlaceholder,
 } from '@langchain/core/prompts';
 import { trimMessages } from '@langchain/core/messages';
+import { HumanMessage } from '@langchain/core/messages';
 import { v4 as uuidv4 } from 'uuid';
 import { MessageModelDTO, MessageResponseDTO, Role } from '@monorepo/shared';
 import { MongoDBSaver } from '@langchain/langgraph-checkpoint-mongodb';
@@ -85,14 +87,42 @@ async function initializeGraph() {
   return graph;
 }
 
-async function runMessage(thread_id: string, text: string) {
+function createHumanMessage(
+  text: string,
+  files?: Express.Multer.File[]
+): HumanMessage {
+  const content: Array<{
+    type: string;
+    text?: string;
+    image_url?: { url: string };
+  }> = [{ type: 'text', text }];
+
+  if (files) {
+    files.forEach((file) => {
+      if (file.mimetype && file.mimetype.startsWith('image/') && file.buffer) {
+        const base64 = file.buffer.toString('base64');
+        const mimeType = file.mimetype;
+        content.push({
+          type: 'image_url',
+          image_url: {
+            url: `data:${mimeType};base64,${base64}`,
+          },
+        });
+      }
+    });
+  }
+
+  return new HumanMessage({ content });
+}
+
+async function runMessage(thread_id: string, userMessage: HumanMessage) {
   try {
     if (!graph) {
       await initializeGraph();
     }
 
     const config = { configurable: { thread_id } };
-    const input = { messages: [{ role: 'user', content: text }] };
+    const input = { messages: [userMessage] };
 
     const output = await graph.invoke(input, config);
     return output.messages[output.messages.length - 1];
@@ -103,14 +133,14 @@ async function runMessage(thread_id: string, text: string) {
 }
 
 // New streaming function
-async function* streamMessage(thread_id: string, text: string) {
+async function* streamMessage(thread_id: string, userMessage: HumanMessage) {
   try {
     if (!graph) {
       await initializeGraph();
     }
 
     const config = { configurable: { thread_id } };
-    const input = { messages: [{ role: 'user', content: text }] };
+    const input = { messages: [userMessage] };
 
     // Stream the graph execution
     const stream = await graph.stream(input, {
@@ -137,97 +167,147 @@ async function* streamMessage(thread_id: string, text: string) {
   }
 }
 
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
+
 const router = Router();
 
 // Initialize MongoDB on startup
 initializeMongoDB().catch(console.error);
 
-router.post('/chat/start', async (req, res) => {
-  try {
-    const { message, stream = false } = req.body;
-    if (!message || typeof message !== 'string') {
-      return res.status(400).json({ error: 'Valid message required' });
-    }
+interface MulterRequest extends Request {
+  files?:
+    | Express.Multer.File[]
+    | { [fieldname: string]: Express.Multer.File[] };
+}
 
-    const thread_id = uuidv4();
+router.post(
+  '/chat/start',
+  upload.array('image', 5),
+  async (req: MulterRequest, res) => {
+    try {
+      const { message, stream = 'false' } = req.body;
+      const filesObj = req.files;
+      const files = Array.isArray(filesObj) ? filesObj : undefined;
 
-    if (stream) {
-      // Set headers for SSE (Server-Sent Events)
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-
-      // Send thread_id first
-      res.write(
-        `data: ${JSON.stringify({ type: 'thread_id', thread_id })}\n\n`
-      );
-
-      try {
-        for await (const chunk of streamMessage(thread_id, message)) {
-          res.write(
-            `data: ${JSON.stringify({ type: 'chunk', ...chunk, thread_id })}\n\n`
-          );
-        }
-        res.write(`data: ${JSON.stringify({ type: 'done', thread_id })}\n\n`);
-        res.end();
-      } catch (err) {
-        res.write(
-          `data: ${JSON.stringify({ type: 'error', error: 'Stream error' })}\n\n`
-        );
-        res.end();
+      if (!message || typeof message !== 'string') {
+        return res.status(400).json({ error: 'Valid message required' });
       }
-    } else {
-      // Non-streaming response (original behavior)
-      const reply = await runMessage(thread_id, message);
-      const data = getFormattedMessage(reply.toJSON(), thread_id);
-      res.json(data);
-    }
-  } catch (err: any) {
-    console.error('Error in /chat/start:', err);
-    res.status(500).json(err);
-  }
-});
 
-router.post('/chat/continue', async (req, res) => {
-  try {
-    const { thread_id, message, stream = false } = req.body;
-    if (!thread_id || !message || typeof message !== 'string') {
-      return res
-        .status(400)
-        .json({ error: 'thread_id and valid message required' });
-    }
-
-    if (stream) {
-      // Set headers for SSE
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-
-      try {
-        for await (const chunk of streamMessage(thread_id, message)) {
-          res.write(
-            `data: ${JSON.stringify({ type: 'chunk', ...chunk, thread_id })}\n\n`
-          );
-        }
-        res.write(`data: ${JSON.stringify({ type: 'done', thread_id })}\n\n`);
-        res.end();
-      } catch (err) {
-        res.write(
-          `data: ${JSON.stringify({ type: 'error', error: 'Stream error' })}\n\n`
-        );
-        res.end();
+      if (
+        files &&
+        files.length > 0 &&
+        files.some((file) => !file.mimetype?.startsWith('image/'))
+      ) {
+        return res
+          .status(400)
+          .json({ error: 'Only image files are supported' });
       }
-    } else {
-      // Non-streaming response (original behavior)
-      const reply = await runMessage(thread_id, message);
-      const data = getFormattedMessage(reply.toJSON(), thread_id);
-      res.json(data);
+
+      const userMessage = createHumanMessage(message, files);
+      const thread_id = uuidv4();
+
+      const isStream = stream === 'true';
+
+      if (isStream) {
+        // Set headers for SSE (Server-Sent Events)
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+
+        // Send thread_id first
+        res.write(
+          `data: ${JSON.stringify({ type: 'thread_id', thread_id })}\n\n`
+        );
+
+        try {
+          for await (const chunk of streamMessage(thread_id, userMessage)) {
+            res.write(
+              `data: ${JSON.stringify({ type: 'chunk', ...chunk, thread_id })}\n\n`
+            );
+          }
+          res.write(`data: ${JSON.stringify({ type: 'done', thread_id })}\n\n`);
+          res.end();
+        } catch (err) {
+          res.write(
+            `data: ${JSON.stringify({ type: 'error', error: 'Stream error' })}\n\n`
+          );
+          res.end();
+        }
+      } else {
+        // Non-streaming response (original behavior)
+        const reply = await runMessage(thread_id, userMessage);
+        const data = getFormattedMessage(reply.toJSON(), thread_id);
+        res.json(data);
+      }
+    } catch (err: any) {
+      console.error('Error in /chat/start:', err);
+      res.status(500).json(err);
     }
-  } catch (err: any) {
-    console.error('Error in /chat/continue:', err);
-    res.status(500).json(err);
   }
-});
+);
+
+router.post(
+  '/chat/continue',
+  upload.array('image', 5),
+  async (req: MulterRequest, res) => {
+    try {
+      const { thread_id, message, stream = 'false' } = req.body;
+      const filesObj = req.files;
+      const files = Array.isArray(filesObj) ? filesObj : undefined;
+
+      if (!thread_id || !message || typeof message !== 'string') {
+        return res
+          .status(400)
+          .json({ error: 'thread_id and valid message required' });
+      }
+
+      if (
+        files &&
+        files.length > 0 &&
+        files.some((file) => !file.mimetype?.startsWith('image/'))
+      ) {
+        return res
+          .status(400)
+          .json({ error: 'Only image files are supported' });
+      }
+
+      const userMessage = createHumanMessage(message, files);
+
+      const isStream = stream === 'true';
+
+      if (isStream) {
+        // Set headers for SSE
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+
+        try {
+          for await (const chunk of streamMessage(thread_id, userMessage)) {
+            res.write(
+              `data: ${JSON.stringify({ type: 'chunk', ...chunk, thread_id })}\n\n`
+            );
+          }
+          res.write(`data: ${JSON.stringify({ type: 'done', thread_id })}\n\n`);
+          res.end();
+        } catch (err) {
+          res.write(
+            `data: ${JSON.stringify({ type: 'error', error: 'Stream error' })}\n\n`
+          );
+          res.end();
+        }
+      } else {
+        // Non-streaming response (original behavior)
+        const reply = await runMessage(thread_id, userMessage);
+        const data = getFormattedMessage(reply.toJSON(), thread_id);
+        res.json(data);
+      }
+    } catch (err: any) {
+      console.error('Error in /chat/continue:', err);
+      res.status(500).json(err);
+    }
+  }
+);
 
 router.get('/chat/:thread_id', async (req, res) => {
   try {

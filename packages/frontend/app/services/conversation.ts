@@ -25,31 +25,68 @@ export const getChatsListRequest = async () => {
     });
 };
 
-export const startChatRequest = async ({ message }: { message: string }) => {
-  return api
-    .post<MessageResponseDTO>('/api/conversation/chat/start', { message })
-    .then((res) => res.data)
-    .catch((err) => {
-      throw err;
+export const startChatRequest = async ({
+  message,
+  images,
+}: {
+  message: string;
+  images?: File[];
+}) => {
+  if (images && images.length > 0) {
+    const formData = new FormData();
+    formData.append('message', message);
+    images.forEach((image) => {
+      formData.append('image', image);
     });
+    return api
+      .post<MessageResponseDTO>('/api/conversation/chat/start', formData)
+      .then((res) => res.data)
+      .catch((err) => {
+        throw err;
+      });
+  } else {
+    return api
+      .post<MessageResponseDTO>('/api/conversation/chat/start', { message })
+      .then((res) => res.data)
+      .catch((err) => {
+        throw err;
+      });
+  }
 };
 
 export const continueChatRequest = async ({
   thread_id,
   message,
+  images,
 }: {
   thread_id: string;
   message: string;
+  images?: File[];
 }) => {
-  return api
-    .post<MessageResponseDTO>('/api/conversation/chat/continue', {
-      thread_id,
-      message,
-    })
-    .then((res) => res.data)
-    .catch((err) => {
-      throw err;
+  if (images && images.length > 0) {
+    const formData = new FormData();
+    formData.append('thread_id', thread_id);
+    formData.append('message', message);
+    images.forEach((image) => {
+      formData.append('image', image);
     });
+    return api
+      .post<MessageResponseDTO>('/api/conversation/chat/continue', formData)
+      .then((res) => res.data)
+      .catch((err) => {
+        throw err;
+      });
+  } else {
+    return api
+      .post<MessageResponseDTO>('/api/conversation/chat/continue', {
+        thread_id,
+        message,
+      })
+      .then((res) => res.data)
+      .catch((err) => {
+        throw err;
+      });
+  }
 };
 
 export const deleteChatRequest = async (thread_id: string) => {
@@ -77,29 +114,33 @@ interface StreamChunk {
  */
 export async function startChatStream({
   message,
+  images,
   onChunk,
   onThreadId,
   onError,
   onComplete,
 }: {
   message: string;
+  images?: File[];
   onChunk: (data: StreamChunk) => void;
   onThreadId?: (threadId: string) => void;
   onError?: (error: string) => void;
   onComplete?: (thread_id: string) => void;
 }): Promise<MessageResponseDTO | null> {
   try {
-    const response = await api.post(
-      '/api/conversation/chat/start',
-      { message, stream: true },
-      {
-        responseType: 'stream',
-        adapter: 'fetch', // Use fetch adapter for better streaming support
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      }
-    );
+    const formData = new FormData();
+    formData.append('message', message);
+    formData.append('stream', 'true');
+    if (images && images.length > 0) {
+      images.forEach((image) => {
+        formData.append('image', image);
+      });
+    }
+
+    const response = await api.post('/api/conversation/chat/start', formData, {
+      responseType: 'stream',
+      adapter: 'fetch', // Use fetch adapter for better streaming support
+    });
 
     // For browser environment, response.data is a ReadableStream
     const reader = response.data.getReader();
@@ -160,26 +201,35 @@ export async function startChatStream({
 export async function continueChatStream({
   threadId,
   message,
+  images,
   onChunk,
   onError,
   onComplete,
 }: {
   threadId: string;
   message: string;
+  images?: File[];
   onChunk: (data: StreamChunk) => void;
   onError?: (error: string) => void;
   onComplete?: () => void;
 }): Promise<MessageResponseDTO | null> {
   try {
+    const formData = new FormData();
+    formData.append('thread_id', threadId);
+    formData.append('message', message);
+    formData.append('stream', 'true');
+    if (images && images.length > 0) {
+      images.forEach((image) => {
+        formData.append('image', image);
+      });
+    }
+
     const response = await api.post(
       '/api/conversation/chat/continue',
-      { thread_id: threadId, message, stream: true },
+      formData,
       {
         responseType: 'stream',
         adapter: 'fetch',
-        headers: {
-          'Content-Type': 'application/json',
-        },
       }
     );
 

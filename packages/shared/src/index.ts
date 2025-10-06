@@ -9,11 +9,20 @@ export interface MessageModelDTO {
   id: [string, string, Role];
   kwargs: Kwargs;
 }
+export interface StructuredContent {
+  type: 'text' | 'image_url';
+  text?: string;
+  image_url?: ImageUrl;
+}
+
+export interface ImageUrl {
+  url: string;
+}
 
 export interface MessageResponseDTO {
   id: string;
   thread_id: string;
-  content: string;
+  content: string | StructuredContent[];
   role: Role;
   structuredData?: {
     kwargs?: Kwargs;
