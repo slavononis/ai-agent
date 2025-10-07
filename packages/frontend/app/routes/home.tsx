@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useState } from 'react';
-import { startChatStream } from '@/services/conversation';
+import { startChatStream, type ChatListItem } from '@/services/conversation';
 import { setStructuralContent } from '@/utils/chat-formatter';
 export function meta({}: Route.MetaArgs) {
   return [
@@ -129,13 +129,31 @@ export default function Home() {
                 'Failed to start chat. Please try again. Details: ' + error
               );
             },
-            onComplete: (thread_id) => {
+            onComplete: (data) => {
               queryClient.setQueryData<MessagesResponseDTO>(
-                getChatQueryKey(thread_id!, mode),
+                getChatQueryKey(data.thread_id!, mode),
                 (oldData) => {
                   return {
                     ...(oldData! || {}),
+                    chat_name: data.chat_name,
                     _initialThought: false,
+                  };
+                }
+              );
+              queryClient.setQueryData<{ chats: ChatListItem[] }>(
+                getChatQueryKey('list', mode),
+                (oldData) => {
+                  return {
+                    ...(oldData! || {}),
+                    chats: (oldData?.chats || []).map((chat) => {
+                      if (chat.thread_id === data.thread_id) {
+                        return {
+                          ...chat,
+                          chat_name: data.chat_name!,
+                        };
+                      }
+                      return chat;
+                    }),
                   };
                 }
               );
@@ -150,6 +168,7 @@ export default function Home() {
         getChatQueryKey(data.thread_id!, mode),
         (oldData) => {
           return {
+            chat_name: data.chat_name,
             thread_id: data.thread_id!,
             messages: [
               ...(oldData?.messages || []),
@@ -163,6 +182,23 @@ export default function Home() {
               },
               data,
             ],
+          };
+        }
+      );
+      queryClient.setQueryData<{ chats: ChatListItem[] }>(
+        getChatQueryKey('list', mode),
+        (oldData) => {
+          return {
+            ...(oldData! || {}),
+            chats: (oldData?.chats || []).map((chat) => {
+              if (chat.thread_id === data.thread_id) {
+                return {
+                  ...chat,
+                  chat_name: data.chat_name!,
+                };
+              }
+              return chat;
+            }),
           };
         }
       );

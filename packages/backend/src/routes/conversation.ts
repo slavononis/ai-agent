@@ -16,7 +16,7 @@ import {
   MessageContentComplex,
   trimMessages,
 } from '@langchain/core/messages';
-import { HumanMessage } from '@langchain/core/messages';
+import { HumanMessage, AIMessage } from '@langchain/core/messages';
 import { v4 as uuidv4 } from 'uuid';
 import {
   type MessageModelDTO,
@@ -32,10 +32,20 @@ import { CSVLoader } from '@langchain/community/document_loaders/fs/csv';
 import { TextLoader } from 'langchain/document_loaders/fs/text';
 import { JSONLoader } from 'langchain/document_loaders/fs/json';
 // @ts-ignore - Not support TS
-import { Blob } from 'blob-polyfill'; // Updated import here
+import { Blob } from 'blob-polyfill';
 import { Document } from '@langchain/core/documents';
 
+// Interface for chat metadata
+interface ChatMetadata {
+  thread_id: string;
+  chat_name: string;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+}
+
 let checkpointer: MongoDBSaver;
+let chatMetadataCollection: any;
 
 async function initializeMongoDB() {
   try {
@@ -44,7 +54,18 @@ async function initializeMongoDB() {
     const dbName = 'user-chat-checkpoint';
     checkpointer = new MongoDBSaver({ client, dbName });
 
-    return { client, checkpointer };
+    // Initialize chat metadata collection
+    const db = client.db(dbName);
+    chatMetadataCollection = db.collection('chat_metadata');
+
+    // Create index for better performance
+    await chatMetadataCollection.createIndex(
+      { thread_id: 1 },
+      { unique: true }
+    );
+    await chatMetadataCollection.createIndex({ updated_at: -1 });
+
+    return { client, checkpointer, chatMetadataCollection };
   } catch (error) {
     console.error('Failed to connect to MongoDB:', error);
     throw error;
@@ -53,7 +74,7 @@ async function initializeMongoDB() {
 
 const llm = new ChatOpenAI({
   model: 'gpt-5-nano',
-  streaming: true, // Enable streaming
+  streaming: true,
 });
 
 const promptTemplate = ChatPromptTemplate.fromMessages([
@@ -93,7 +114,6 @@ const workflow = new StateGraph(MessagesAnnotation)
 
 let graph: ReturnType<(typeof workflow)['compile']>;
 
-// Initialize the graph with checkpointer
 async function initializeGraph() {
   if (!checkpointer) {
     await initializeMongoDB();
@@ -107,7 +127,7 @@ const contentTypes = [
   'image/png',
   'image/webp',
   'application/pdf',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // DOCX
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'text/csv',
   'text/plain',
   'application/json',
@@ -120,7 +140,6 @@ async function createHumanMessage(
   text: string,
   files?: Express.Multer.File[]
 ): Promise<HumanMessage> {
-  // let fullText = text;
   const content: (MessageContentComplex | DataContentBlock)[] = [
     { type: 'text', text: text },
   ];
@@ -132,11 +151,10 @@ async function createHumanMessage(
       const isAllowedDoc = ALLOWED_MIME_TYPES.has(mime as AppMimeType);
 
       if (!isImage && !isAllowedDoc) {
-        continue; // Skip unsupported
+        continue;
       }
 
       if (isImage && file.buffer) {
-        // Handle images as base64
         const base64 = file.buffer.toString('base64');
         content.push({
           type: 'image_url',
@@ -148,7 +166,7 @@ async function createHumanMessage(
           if (!buffer) continue;
 
           const filename = file.originalname || 'unknown';
-          const blob = new Blob([buffer], { type: mime }); // Convert buffer to Blob
+          const blob = new Blob([buffer], { type: mime });
           const createFileContent = (docs: Document<Record<string, any>>[]) => {
             const extracted = docs
               .map((doc: any) => doc.pageContent)
@@ -210,6 +228,103 @@ async function createHumanMessage(
   return new HumanMessage({ content });
 }
 
+// Function to generate chat names
+async function generateChatName(
+  userMessage: string,
+  aiResponse?: string
+): Promise<string> {
+  try {
+    const promptContent = aiResponse
+      ? `Based on this conversation, generate a short, descriptive chat title (max 5 words). User: "${userMessage.substring(0, 100)}" Assistant: "${aiResponse.substring(0, 100)}"`
+      : `Generate a short, descriptive title (max 5 words) for a chat starting with: "${userMessage.substring(0, 100)}"`;
+
+    const namingPrompt = ChatPromptTemplate.fromMessages([
+      {
+        role: 'system',
+        content:
+          'You are a helpful assistant that generates concise, descriptive chat titles. Respond with only the title, no additional text. Maximum 5 words.',
+      },
+      {
+        role: 'user',
+        content: promptContent,
+      },
+    ]);
+
+    const namingLlm = new ChatOpenAI({
+      model: 'gpt-3.5-turbo',
+      temperature: 0.7,
+    });
+
+    const response = await namingLlm.invoke(await namingPrompt.invoke({}));
+    let title = response.content.toString().trim();
+
+    // Clean up the title
+    title = title.replace(/["']/g, '').substring(0, 60);
+
+    return title || 'New Chat';
+  } catch (error) {
+    console.error('Error generating chat name:', error);
+    // Fallback: use first few words of user message
+    const words = userMessage.split(' ').slice(0, 4).join(' ');
+    return words || 'New Chat';
+  }
+}
+
+// Function to update chat metadata
+async function updateChatMetadata(
+  thread_id: string,
+  chat_name?: string,
+  isNewChat: boolean = false
+): Promise<void> {
+  if (!chatMetadataCollection) {
+    await initializeMongoDB();
+  }
+
+  const now = new Date().toISOString();
+
+  if (isNewChat && chat_name) {
+    // Create new chat metadata
+    await chatMetadataCollection.updateOne(
+      { thread_id },
+      {
+        $set: {
+          thread_id,
+          chat_name,
+          created_at: now,
+          updated_at: now,
+          message_count: 1,
+        },
+      },
+      { upsert: true }
+    );
+  } else {
+    // Update existing chat
+    const updateData: any = {
+      $inc: { message_count: 1 },
+      $set: { updated_at: now },
+    };
+
+    if (chat_name) {
+      updateData.$set.chat_name = chat_name;
+    }
+
+    await chatMetadataCollection.updateOne({ thread_id }, updateData, {
+      upsert: true,
+    });
+  }
+}
+
+// Function to get chat metadata
+async function getChatMetadata(
+  thread_id: string
+): Promise<ChatMetadata | null> {
+  if (!chatMetadataCollection) {
+    await initializeMongoDB();
+  }
+
+  return await chatMetadataCollection.findOne({ thread_id });
+}
+
 async function runMessage(thread_id: string, userMessage: HumanMessage) {
   try {
     if (!graph) {
@@ -227,7 +342,7 @@ async function runMessage(thread_id: string, userMessage: HumanMessage) {
   }
 }
 
-// New streaming function
+// Streaming function
 async function* streamMessage(thread_id: string, userMessage: HumanMessage) {
   try {
     if (!graph) {
@@ -237,14 +352,12 @@ async function* streamMessage(thread_id: string, userMessage: HumanMessage) {
     const config = { configurable: { thread_id } };
     const input = { messages: [userMessage] };
 
-    // Stream the graph execution
     const stream = await graph.stream(input, {
       ...config,
       streamMode: 'messages',
     });
 
     for await (const [message, metadata] of stream) {
-      // Only yield assistant messages (skip user messages)
       if (
         message.constructor.name === Role.AIMessageChunk ||
         (message as any).type === 'ai'
@@ -265,7 +378,7 @@ async function* streamMessage(thread_id: string, userMessage: HumanMessage) {
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit per file
+  limits: { fileSize: 10 * 1024 * 1024 },
 });
 
 const router = Router();
@@ -279,6 +392,7 @@ interface MulterRequest extends Request {
     | { [fieldname: string]: Express.Multer.File[] };
 }
 
+// Start a new chat
 router.post(
   '/chat/start',
   upload.array('file', 5),
@@ -308,27 +422,36 @@ router.post(
 
       const userMessage = await createHumanMessage(message, files);
       const thread_id = uuidv4();
-
       const isStream = stream === 'true';
 
       if (isStream) {
-        // Set headers for SSE (Server-Sent Events)
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
 
-        // Send thread_id first
+        let fullResponse = '';
+
         res.write(
           `data: ${JSON.stringify({ type: 'thread_id', thread_id })}\n\n`
         );
 
         try {
           for await (const chunk of streamMessage(thread_id, userMessage)) {
+            if (chunk.content) {
+              fullResponse += chunk.content;
+            }
             res.write(
               `data: ${JSON.stringify({ type: 'chunk', ...chunk, thread_id })}\n\n`
             );
           }
-          res.write(`data: ${JSON.stringify({ type: 'done', thread_id })}\n\n`);
+
+          // Generate and store chat name after streaming completes
+          const chatName = await generateChatName(message, fullResponse);
+          await updateChatMetadata(thread_id, chatName, true);
+
+          res.write(
+            `data: ${JSON.stringify({ type: 'done', thread_id, chat_name: chatName })}\n\n`
+          );
           res.end();
         } catch (err) {
           res.write(
@@ -337,18 +460,33 @@ router.post(
           res.end();
         }
       } else {
-        // Non-streaming response (original behavior)
+        // Non-streaming response
         const reply = await runMessage(thread_id, userMessage);
         const data = getFormattedMessage(reply.toJSON(), thread_id);
-        res.json(data);
+
+        // Generate and store chat name
+        const chatName = await generateChatName(
+          message,
+          reply.content.toString()
+        );
+        await updateChatMetadata(thread_id, chatName, true);
+
+        // Include chat name in response
+        const responseWithChatName = {
+          ...data,
+          chat_name: chatName,
+        };
+
+        res.json(responseWithChatName);
       }
     } catch (err: any) {
       console.error('Error in /chat/start:', err);
-      res.status(500).json(err);
+      res.status(500).json({ error: err.message });
     }
   }
 );
 
+// Continue existing chat
 router.post(
   '/chat/continue',
   upload.array('file', 5),
@@ -379,11 +517,9 @@ router.post(
       }
 
       const userMessage = await createHumanMessage(message, files);
-
       const isStream = stream === 'true';
 
       if (isStream) {
-        // Set headers for SSE
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
@@ -394,6 +530,10 @@ router.post(
               `data: ${JSON.stringify({ type: 'chunk', ...chunk, thread_id })}\n\n`
             );
           }
+
+          // Update chat metadata
+          await updateChatMetadata(thread_id);
+
           res.write(`data: ${JSON.stringify({ type: 'done', thread_id })}\n\n`);
           res.end();
         } catch (err) {
@@ -403,18 +543,23 @@ router.post(
           res.end();
         }
       } else {
-        // Non-streaming response (original behavior)
+        // Non-streaming response
         const reply = await runMessage(thread_id, userMessage);
         const data = getFormattedMessage(reply.toJSON(), thread_id);
+
+        // Update chat metadata
+        await updateChatMetadata(thread_id);
+
         res.json(data);
       }
     } catch (err: any) {
       console.error('Error in /chat/continue:', err);
-      res.status(500).json(err);
+      res.status(500).json({ error: err.message });
     }
   }
 );
 
+// Get specific chat with messages
 router.get('/chat/:thread_id', async (req, res) => {
   try {
     const { thread_id } = req.params;
@@ -427,7 +572,6 @@ router.get('/chat/:thread_id', async (req, res) => {
     }
 
     const config = { configurable: { thread_id } };
-
     const { values } = await graph.getState(config);
 
     if (!values) {
@@ -440,19 +584,27 @@ router.get('/chat/:thread_id', async (req, res) => {
       return getFormattedMessage(msg, thread_id);
     });
 
+    // Get chat metadata
+    const chatMetadata = await getChatMetadata(thread_id);
+
     res.json({
       thread_id,
+      chat_name: chatMetadata?.chat_name || 'New Chat',
+      created_at: chatMetadata?.created_at,
+      updated_at: chatMetadata?.updated_at,
+      message_count: chatMetadata?.message_count || messages.length,
       messages: messages,
     });
   } catch (err: any) {
     console.error('Error in /chat/:thread_id:', err);
-    res.status(500).json(err);
+    res.status(500).json({ error: err.message });
   }
 });
 
+// Get all chats list
 router.get('/chats', async (req, res) => {
   try {
-    if (!checkpointer) {
+    if (!checkpointer || !chatMetadataCollection) {
       await initializeMongoDB();
     }
 
@@ -466,25 +618,65 @@ router.get('/chats', async (req, res) => {
     })) {
       const threadId = config?.configurable?.thread_id;
       if (threadId) {
-        // keep only the latest ts per thread
         if (!chatMap.has(threadId) || chatMap.get(threadId)!.ts < ts) {
           chatMap.set(threadId, { thread_id: threadId, ts });
         }
       }
     }
 
-    // convert to array and sort by ts desc (latest first)
-    const chats = Array.from(chatMap.values()).sort(
-      (a, b) => (b.ts as any) - (a.ts as any)
+    // Get chat metadata for all threads
+    const chatsWithMetadata = await Promise.all(
+      Array.from(chatMap.values()).map(async ({ thread_id, ts }) => {
+        const metadata = await getChatMetadata(thread_id);
+        return {
+          thread_id,
+          chat_name: metadata?.chat_name || 'New Chat',
+          created_at: metadata?.created_at,
+          updated_at: metadata?.updated_at || ts,
+          message_count: metadata?.message_count || 1,
+        };
+      })
     );
 
-    res.json({ chats });
+    // Sort by updated_at desc (latest first)
+    const sortedChats = chatsWithMetadata.sort(
+      (a, b) =>
+        new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    );
+
+    res.json({ chats: sortedChats });
   } catch (err: any) {
     console.error('Error in /chats:', err);
-    res.status(500).json(err);
+    res.status(500).json({ error: err.message });
   }
 });
 
+// Update chat name
+router.patch('/chat/:thread_id/name', async (req, res) => {
+  try {
+    const { thread_id } = req.params;
+    const { chat_name } = req.body;
+
+    if (!thread_id || !chat_name || typeof chat_name !== 'string') {
+      return res
+        .status(400)
+        .json({ error: 'thread_id and chat_name required' });
+    }
+
+    if (chat_name.length > 100) {
+      return res.status(400).json({ error: 'Chat name too long' });
+    }
+
+    await updateChatMetadata(thread_id, chat_name, false);
+
+    res.json({ success: true, thread_id, chat_name });
+  } catch (err: any) {
+    console.error('Error updating chat name:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete chat
 router.delete('/chat/:thread_id', async (req, res) => {
   try {
     const { thread_id } = req.params;
@@ -492,22 +684,22 @@ router.delete('/chat/:thread_id', async (req, res) => {
       return res.status(400).json({ error: 'thread_id required' });
     }
 
-    if (!checkpointer) {
+    if (!checkpointer || !chatMetadataCollection) {
       await initializeMongoDB();
     }
 
     await checkpointer.deleteThread(thread_id);
+    await chatMetadataCollection.deleteOne({ thread_id });
 
     res.json({ success: true, deleted: thread_id });
   } catch (err: any) {
     console.error('Error in DELETE /chat/:thread_id:', err);
-    res.status(500).json(err);
+    res.status(500).json({ error: err.message });
   }
 });
 
 process.on('SIGINT', async () => {
   await (await dbConnect()).close();
-
   process.exit(0);
 });
 

@@ -14,11 +14,16 @@ export const getChatDetails = async ({ projectId }: { projectId: string }) => {
     });
 };
 
+export interface ChatListItem {
+  thread_id: string;
+  chat_name: string;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+}
 export const getChatsListRequest = async () => {
   return api
-    .get<{ chats: { thread_id: string; ts: string }[] }>(
-      '/api/conversation/chats'
-    )
+    .get<{ chats: ChatListItem[] }>('/api/conversation/chats')
     .then((res) => res.data)
     .catch((err) => {
       throw err;
@@ -106,6 +111,7 @@ interface StreamChunk {
   content?: string;
   role?: Role;
   id?: string;
+  chat_name?: string;
   error?: string;
 }
 
@@ -125,7 +131,7 @@ export async function startChatStream({
   onChunk: (data: StreamChunk) => void;
   onThreadId?: (threadId: string) => void;
   onError?: (error: string) => void;
-  onComplete?: (thread_id: string) => void;
+  onComplete?: (data: StreamChunk) => void;
 }): Promise<MessageResponseDTO | null> {
   try {
     const formData = new FormData();
@@ -171,7 +177,7 @@ export async function startChatStream({
                 break;
               case 'done':
                 if (onComplete && data.thread_id) {
-                  onComplete(data.thread_id);
+                  onComplete(data);
                 }
                 break;
               case 'error':

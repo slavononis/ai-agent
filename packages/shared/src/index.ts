@@ -22,6 +22,7 @@ export interface ImageUrl {
 
 export interface MessageResponseDTO {
   id: string;
+  chat_name?: string;
   thread_id: string;
   content: string | StructuredContent[];
   role: Role;
@@ -33,6 +34,7 @@ export interface MessageResponseDTO {
 export interface MessagesResponseDTO {
   _initialThought?: boolean;
   thread_id: string;
+  chat_name?: string;
   messages: MessageResponseDTO[];
 }
 

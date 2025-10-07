@@ -50,6 +50,7 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
   };
 
   const { mutate, isPending } = useMutation({
+    mutationKey: getChatQueryKey(id!, mode),
     mutationFn: ({ message, files }: { message: string; files?: File[] }) => {
       const tempChatId = `temp-${Date.now().toString()}`;
       queryClient.setQueryData<MessagesResponseDTO>(
@@ -130,9 +131,6 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
                   };
                 }
               );
-            },
-            onComplete: () => {
-              console.log('onComplete');
             },
           })
         : continueProjectRequest({ message, thread_id: id! });
@@ -297,7 +295,6 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
           loading={chatThinking}
           onSend={(message, files) => {
             mutate({ message, files: files || undefined });
-            console.log(files);
           }}
         />
       </div>

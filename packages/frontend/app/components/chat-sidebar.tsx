@@ -24,6 +24,7 @@ import { Mode } from '@/routes/home';
 import {
   getChatsListRequest,
   deleteChatRequest,
+  getChatDetails,
 } from '@/services/conversation';
 import { Button } from '@/components/ui/button';
 import { Link, useNavigate, useParams } from 'react-router';
@@ -68,7 +69,15 @@ export function ChatSidebar({
       }
     },
   });
-
+  const [threadLoading, setThreadLoading] = React.useState(false);
+  queryClient.getMutationCache().subscribe(({ mutation }) => {
+    if (
+      mutation?.options.mutationKey?.join(',') ===
+      getChatQueryKey(id!, Mode.Chat).join(',')
+    ) {
+      setThreadLoading(mutation.state.status === 'pending');
+    }
+  });
   return (
     <Sidebar variant="floating" {...props}>
       <SidebarHeader className="flex items-center flex-row gap-4 border-b">
@@ -106,13 +115,14 @@ export function ChatSidebar({
                   }}
                   className={cn('group/chat flex flex-col pb-3 relative p-2', {
                     'bg-muted rounded-md': chat.thread_id === id,
+                    'animate-pulse': threadLoading && chat.thread_id === id,
                   })}
                 >
                   <dd className="pt-1 mb-1 text-sm font-semibold text-foreground truncate">
-                    {chat.thread_id}
+                    {chat.chat_name}
                   </dd>
                   <dt className="text-xs text-muted-foreground">
-                    {formatDate(chat.ts)}
+                    {formatDate(chat.updated_at)}
                   </dt>
 
                   <AlertDialog>
