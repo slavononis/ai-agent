@@ -37,13 +37,13 @@ export default function Home() {
   const isChatMode = mode === Mode.Chat;
   const { mutate, isPending } = useMutation({
     mutationKey: getChatQueryKey('new-thread', mode),
-    mutationFn: ({ message, images }: { message: string; images?: File[] }) => {
+    mutationFn: ({ message, files }: { message: string; files?: File[] }) => {
       const tempChatId = `temp-${Date.now().toString()}`;
 
       return isChatMode
         ? startChatStream({
             message,
-            images,
+            files,
             onChunk: (chunk) => {
               queryClient.setQueryData<MessagesResponseDTO>(
                 getChatQueryKey(chunk.thread_id!, mode),
@@ -56,8 +56,8 @@ export default function Home() {
                         {
                           id: tempChatId,
                           thread_id: chunk.thread_id!,
-                          content: images
-                            ? setStructuralContent(message, images)
+                          content: files
+                            ? setStructuralContent(message, files)
                             : message,
                           role: Role.HumanMessage,
                         },
@@ -112,8 +112,8 @@ export default function Home() {
                         {
                           id: tempChatId,
                           thread_id: threadId!,
-                          content: images
-                            ? setStructuralContent(message, images)
+                          content: files
+                            ? setStructuralContent(message, files)
                             : message,
                           role: Role.HumanMessage,
                         },
@@ -156,8 +156,8 @@ export default function Home() {
               {
                 id: tempChatId,
                 thread_id: data.thread_id!,
-                content: vars.images
-                  ? setStructuralContent(vars.message, vars.images)
+                content: vars.files
+                  ? setStructuralContent(vars.message, vars.files)
                   : vars.message,
                 role: Role.HumanMessage,
               },
@@ -198,7 +198,7 @@ export default function Home() {
           clearOnSend={false}
           loading={isPending}
           onSend={(prompt, files) => {
-            mutate({ message: prompt, images: files || undefined });
+            mutate({ message: prompt, files: files || undefined });
           }}
         />
       </div>

@@ -73,7 +73,7 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
       return isChatMode
         ? continueChatStream({
             message,
-            images: files,
+            files,
             threadId: id!,
             onChunk: (chunk) => {
               queryClient.setQueryData<MessagesResponseDTO>(

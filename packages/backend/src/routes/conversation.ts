@@ -14,10 +14,21 @@ import {
 import { trimMessages } from '@langchain/core/messages';
 import { HumanMessage } from '@langchain/core/messages';
 import { v4 as uuidv4 } from 'uuid';
-import { MessageModelDTO, MessageResponseDTO, Role } from '@monorepo/shared';
+import {
+  type MessageModelDTO,
+  type MessageResponseDTO,
+  Role,
+} from '@monorepo/shared';
 import { MongoDBSaver } from '@langchain/langgraph-checkpoint-mongodb';
 import dbConnect from '../lib/mongoDB';
 import { getFormattedMessage } from '../utils/message-format';
+import { PDFLoader } from '@langchain/community/document_loaders/fs/pdf';
+import { DocxLoader } from '@langchain/community/document_loaders/fs/docx';
+import { CSVLoader } from '@langchain/community/document_loaders/fs/csv';
+import { TextLoader } from 'langchain/document_loaders/fs/text';
+import { JSONLoader } from 'langchain/document_loaders/fs/json';
+// @ts-ignore - Not support TS
+import { Blob } from 'blob-polyfill'; // Updated import here
 
 let checkpointer: MongoDBSaver;
 
@@ -87,30 +98,106 @@ async function initializeGraph() {
   return graph;
 }
 
-function createHumanMessage(
+const contentTypes = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // DOCX
+  'text/csv',
+  'text/plain',
+  'application/json',
+] as const;
+
+type AppMimeType = (typeof contentTypes)[number];
+const ALLOWED_MIME_TYPES = new Set(contentTypes);
+
+async function createHumanMessage(
   text: string,
   files?: Express.Multer.File[]
-): HumanMessage {
+): Promise<HumanMessage> {
+  let fullText = text;
   const content: Array<{
     type: string;
     text?: string;
     image_url?: { url: string };
-  }> = [{ type: 'text', text }];
+  }> = [{ type: 'text', text: fullText }];
 
   if (files) {
-    files.forEach((file) => {
-      if (file.mimetype && file.mimetype.startsWith('image/') && file.buffer) {
+    for (const file of files) {
+      const mime = file.mimetype || '';
+      const isImage = mime.startsWith('image/');
+      const isAllowedDoc = ALLOWED_MIME_TYPES.has(mime as AppMimeType);
+
+      if (!isImage && !isAllowedDoc) {
+        continue; // Skip unsupported
+      }
+
+      if (isImage && file.buffer) {
+        // Handle images as base64
         const base64 = file.buffer.toString('base64');
-        const mimeType = file.mimetype;
         content.push({
           type: 'image_url',
-          image_url: {
-            url: `data:${mimeType};base64,${base64}`,
-          },
+          image_url: { url: `data:${mime};base64,${base64}` },
         });
+      } else {
+        let extracted = '';
+        try {
+          const buffer = file.buffer;
+          if (!buffer) continue;
+
+          const filename = file.originalname || 'unknown';
+          const blob = new Blob([buffer], { type: mime }); // Convert buffer to Blob
+
+          let loader: any;
+          if (mime === 'application/pdf') {
+            loader = new PDFLoader(blob, {
+              pdfjs: () => import('pdfjs-dist/legacy/build/pdf.mjs'),
+            });
+          } else if (
+            mime ===
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+          ) {
+            loader = new DocxLoader(blob);
+          } else if (mime === 'text/csv') {
+            loader = new CSVLoader(blob);
+          } else if (mime === 'text/plain') {
+            loader = new TextLoader(blob);
+          } else if (mime === 'application/json') {
+            loader = new JSONLoader(blob);
+          }
+
+          if (loader) {
+            const docs = await loader.load();
+            extracted = docs.map((doc: any) => doc.pageContent).join('\n\n');
+          }
+
+          if (extracted) {
+            content.push({
+              type: 'text',
+              text: `\n\n--- Content of ${filename} ---\n${extracted}`,
+            });
+          }
+        } catch (e) {
+          console.error(`Error extracting ${file.originalname}:`, e);
+        }
       }
-    });
+    }
   }
+
+  // Merge all text parts into one coherent message
+  fullText = content
+    .filter(
+      (part): part is { type: 'text'; text: string } => part.type === 'text'
+    )
+    .map((part) => part.text)
+    .join('\n\n');
+
+  content[0].text = fullText; // Update the initial text with merged content
+  // Remove duplicate text parts, keep images only
+  const imageParts = content.filter((part) => part.type === 'image_url');
+  content.splice(1, content.length); // Clear after first text
+  content.push(...imageParts); // Add images back
 
   return new HumanMessage({ content });
 }
@@ -168,7 +255,10 @@ async function* streamMessage(thread_id: string, userMessage: HumanMessage) {
 }
 
 const storage = multer.memoryStorage();
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit per file
+});
 
 const router = Router();
 
@@ -183,7 +273,7 @@ interface MulterRequest extends Request {
 
 router.post(
   '/chat/start',
-  upload.array('image', 5),
+  upload.array('file', 5),
   async (req: MulterRequest, res) => {
     try {
       const { message, stream = 'false' } = req.body;
@@ -197,14 +287,18 @@ router.post(
       if (
         files &&
         files.length > 0 &&
-        files.some((file) => !file.mimetype?.startsWith('image/'))
+        files.some((file) => {
+          const mime = file.mimetype || '';
+          const isImage = mime.startsWith('image/');
+          return !isImage && !ALLOWED_MIME_TYPES.has(mime as AppMimeType);
+        })
       ) {
-        return res
-          .status(400)
-          .json({ error: 'Only image files are supported' });
+        return res.status(400).json({
+          error: 'Only image, PDF, Word, CSV, TXT, JSON files are supported',
+        });
       }
 
-      const userMessage = createHumanMessage(message, files);
+      const userMessage = await createHumanMessage(message, files);
       const thread_id = uuidv4();
 
       const isStream = stream === 'true';
@@ -249,7 +343,7 @@ router.post(
 
 router.post(
   '/chat/continue',
-  upload.array('image', 5),
+  upload.array('file', 5),
   async (req: MulterRequest, res) => {
     try {
       const { thread_id, message, stream = 'false' } = req.body;
@@ -265,14 +359,18 @@ router.post(
       if (
         files &&
         files.length > 0 &&
-        files.some((file) => !file.mimetype?.startsWith('image/'))
+        files.some((file) => {
+          const mime = file.mimetype || '';
+          const isImage = mime.startsWith('image/');
+          return !isImage && !ALLOWED_MIME_TYPES.has(mime as AppMimeType);
+        })
       ) {
-        return res
-          .status(400)
-          .json({ error: 'Only image files are supported' });
+        return res.status(400).json({
+          error: 'Only image, PDF, Word, CSV, TXT, JSON files are supported',
+        });
       }
 
-      const userMessage = createHumanMessage(message, files);
+      const userMessage = await createHumanMessage(message, files);
 
       const isStream = stream === 'true';
 

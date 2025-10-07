@@ -9,20 +9,26 @@
     "build": "tsc -p ."
   },
   "dependencies": {
-    "@langchain/core": "^0.3.77",
+    "@langchain/community": "^0.3.57",
+    "@langchain/core": "^0.3.78",
     "@langchain/langgraph": "^0.4.9",
     "@langchain/langgraph-checkpoint-mongodb": "^0.1.1",
     "@langchain/openai": "^0.6.13",
     "@modelcontextprotocol/sdk": "^1.18.2",
     "@monorepo/shared": "1.0.0",
+    "blob-polyfill": "^9.0.20240710",
     "cors": "^2.8.5",
+    "d3-dsv": "^2.0.0",
     "dotenv": "^17.2.2",
     "express": "^4.18.2",
     "langchain": "^0.3.34",
     "lodash": "^4.17.21",
+    "mammoth": "^1.11.0",
     "mongodb": "^6.20.0",
     "multer": "^2.0.2",
     "openai": "^5.12.2",
+    "pdf-parse": "^2.2.0",
+    "pdfjs-dist": "^5.4.296",
     "zod": "^3.25.76"
   },
   "devDependencies": {

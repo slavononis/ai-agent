@@ -114,14 +114,14 @@ interface StreamChunk {
  */
 export async function startChatStream({
   message,
-  images,
+  files,
   onChunk,
   onThreadId,
   onError,
   onComplete,
 }: {
   message: string;
-  images?: File[];
+  files?: File[];
   onChunk: (data: StreamChunk) => void;
   onThreadId?: (threadId: string) => void;
   onError?: (error: string) => void;
@@ -131,9 +131,9 @@ export async function startChatStream({
     const formData = new FormData();
     formData.append('message', message);
     formData.append('stream', 'true');
-    if (images && images.length > 0) {
-      images.forEach((image) => {
-        formData.append('image', image);
+    if (files && files.length > 0) {
+      files.forEach((file) => {
+        formData.append('file', file);
       });
     }
 
@@ -201,14 +201,14 @@ export async function startChatStream({
 export async function continueChatStream({
   threadId,
   message,
-  images,
+  files,
   onChunk,
   onError,
   onComplete,
 }: {
   threadId: string;
   message: string;
-  images?: File[];
+  files?: File[];
   onChunk: (data: StreamChunk) => void;
   onError?: (error: string) => void;
   onComplete?: () => void;
@@ -218,9 +218,9 @@ export async function continueChatStream({
     formData.append('thread_id', threadId);
     formData.append('message', message);
     formData.append('stream', 'true');
-    if (images && images.length > 0) {
-      images.forEach((image) => {
-        formData.append('image', image);
+    if (files && files.length > 0) {
+      files.forEach((file) => {
+        formData.append('file', file);
       });
     }
 
