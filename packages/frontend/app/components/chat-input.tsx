@@ -39,6 +39,16 @@ const dedupeFiles = (arr: File[]) => {
   return Array.from(map.values());
 };
 
+const contentTypes = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // DOCX
+  'text/csv',
+  'text/plain',
+  'application/json',
+] as const;
 export const ChatInput: React.FC<ChatInputProps> = ({
   onSend,
   loading,
@@ -173,6 +183,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             </Button>
             <input
               ref={fileInputRef}
+              accept={contentTypes.join(',')}
               onChange={handleFilesUpload}
               type="file"
               multiple

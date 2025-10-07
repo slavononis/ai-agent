@@ -49,6 +49,9 @@ export const getStructuralContent = (
       case 'text':
         acc += `${curr.text}\n\n` || '';
         break;
+      case 'file':
+        acc += `![${curr.filename}](internal-file)`;
+        break;
       case 'image_url':
         if (curr.image_url?.url) {
           acc += `![${curr.image_url?.url}](${curr.image_url?.url})`;
@@ -63,18 +66,27 @@ export const getStructuralContent = (
 
 export const setStructuralContent = (
   content: string,
-  images?: File[]
+  files?: File[]
 ): StructuredContent[] => {
   return [
     {
       type: 'text',
       text: content,
     },
-    ...(images?.map((image) => ({
-      type: 'image_url' as const,
-      image_url: {
-        url: URL.createObjectURL(image!),
-      },
-    })) ?? []),
+    ...(files?.map((file): StructuredContent => {
+      if (!file.type.startsWith('image/')) {
+        return {
+          type: 'file',
+          filename: file.name,
+          text: '',
+        };
+      }
+      return {
+        type: 'image_url',
+        image_url: {
+          url: URL.createObjectURL(file!),
+        },
+      };
+    }) ?? []),
   ];
 };

@@ -1,6 +1,12 @@
 import 'highlight.js/styles/github-dark.css';
 
-import { Check, Copy, MessageSquareCode, ScanEye } from 'lucide-react';
+import {
+  Check,
+  Copy,
+  FileIcon,
+  MessageSquareCode,
+  ScanEye,
+} from 'lucide-react';
 import React, { memo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
@@ -232,12 +238,23 @@ const _MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
             </a>
           ),
           img: ({ node, ...props }) => {
+            if (props.src === 'internal-file')
+              return (
+                <div className="flex">
+                  <div className="flex flex-col gap-1 items-start">
+                    <FileIcon className="size-40" />
+                    <span className="text-xs truncate max-w-[160px]">
+                      {props.alt}
+                    </span>
+                  </div>
+                </div>
+              );
             return (
               <img
                 {...props}
                 alt={'Image'}
                 src={props.src || props.alt}
-                className="max-w-md h-auto rounded-md border border-color-border mt-4 mb-2 last:mb-0 shadow-sm"
+                className="max-w-md w-full h-auto rounded-md border border-color-border mt-4 mb-2 last:mb-0 shadow-sm"
                 loading="lazy"
               />
             );

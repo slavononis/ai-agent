@@ -11,7 +11,11 @@ import {
   ChatPromptTemplate,
   MessagesPlaceholder,
 } from '@langchain/core/prompts';
-import { trimMessages } from '@langchain/core/messages';
+import {
+  DataContentBlock,
+  MessageContentComplex,
+  trimMessages,
+} from '@langchain/core/messages';
 import { HumanMessage } from '@langchain/core/messages';
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -29,6 +33,7 @@ import { TextLoader } from 'langchain/document_loaders/fs/text';
 import { JSONLoader } from 'langchain/document_loaders/fs/json';
 // @ts-ignore - Not support TS
 import { Blob } from 'blob-polyfill'; // Updated import here
+import { Document } from '@langchain/core/documents';
 
 let checkpointer: MongoDBSaver;
 
@@ -71,7 +76,6 @@ const trimmer = trimMessages({
 const callModel = async (state: typeof MessagesAnnotation.State) => {
   try {
     const trimmedMessages = await trimmer.invoke(state.messages);
-    console.log('Trimmed Messages (for debugging):', trimmedMessages);
     const prompt = await promptTemplate.invoke({ messages: trimmedMessages });
     const response = await llm.invoke(prompt);
 
@@ -116,16 +120,14 @@ async function createHumanMessage(
   text: string,
   files?: Express.Multer.File[]
 ): Promise<HumanMessage> {
-  let fullText = text;
-  const content: Array<{
-    type: string;
-    text?: string;
-    image_url?: { url: string };
-  }> = [{ type: 'text', text: fullText }];
+  // let fullText = text;
+  const content: (MessageContentComplex | DataContentBlock)[] = [
+    { type: 'text', text: text },
+  ];
 
   if (files) {
     for (const file of files) {
-      const mime = file.mimetype || '';
+      const mime = (file.mimetype || '') as AppMimeType;
       const isImage = mime.startsWith('image/');
       const isAllowedDoc = ALLOWED_MIME_TYPES.has(mime as AppMimeType);
 
@@ -141,42 +143,62 @@ async function createHumanMessage(
           image_url: { url: `data:${mime};base64,${base64}` },
         });
       } else {
-        let extracted = '';
         try {
           const buffer = file.buffer;
           if (!buffer) continue;
 
           const filename = file.originalname || 'unknown';
           const blob = new Blob([buffer], { type: mime }); // Convert buffer to Blob
-
-          let loader: any;
-          if (mime === 'application/pdf') {
-            loader = new PDFLoader(blob, {
-              pdfjs: () => import('pdfjs-dist/legacy/build/pdf.mjs'),
-            });
-          } else if (
-            mime ===
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-          ) {
-            loader = new DocxLoader(blob);
-          } else if (mime === 'text/csv') {
-            loader = new CSVLoader(blob);
-          } else if (mime === 'text/plain') {
-            loader = new TextLoader(blob);
-          } else if (mime === 'application/json') {
-            loader = new JSONLoader(blob);
-          }
-
-          if (loader) {
-            const docs = await loader.load();
-            extracted = docs.map((doc: any) => doc.pageContent).join('\n\n');
-          }
-
-          if (extracted) {
+          const createFileContent = (docs: Document<Record<string, any>>[]) => {
+            const extracted = docs
+              .map((doc: any) => doc.pageContent)
+              .join('\n\n');
             content.push({
-              type: 'text',
-              text: `\n\n--- Content of ${filename} ---\n${extracted}`,
+              type: 'file',
+              filename,
+              text: `--- Content of ${filename} ---\n${extracted}`,
             });
+          };
+          switch (mime) {
+            case 'application/pdf': {
+              const pdfLoader = new PDFLoader(blob, {
+                pdfjs: () => import('pdfjs-dist/legacy/build/pdf.mjs'),
+              });
+              const docs = await pdfLoader.load();
+              createFileContent(docs);
+              break;
+            }
+
+            case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': {
+              const docxLoader = new DocxLoader(blob);
+              const docs = await docxLoader.load();
+              createFileContent(docs);
+              break;
+            }
+
+            case 'text/csv': {
+              const csvLoader = new CSVLoader(blob);
+              const docs = await csvLoader.load();
+              createFileContent(docs);
+              break;
+            }
+
+            case 'text/plain': {
+              const textLoader = new TextLoader(blob);
+              const docs = await textLoader.load();
+              createFileContent(docs);
+              break;
+            }
+
+            case 'application/json': {
+              const jsonLoader = new JSONLoader(blob);
+              const docs = await jsonLoader.load();
+              createFileContent(docs);
+              break;
+            }
+
+            default:
+              break;
           }
         } catch (e) {
           console.error(`Error extracting ${file.originalname}:`, e);
@@ -184,20 +206,6 @@ async function createHumanMessage(
       }
     }
   }
-
-  // Merge all text parts into one coherent message
-  fullText = content
-    .filter(
-      (part): part is { type: 'text'; text: string } => part.type === 'text'
-    )
-    .map((part) => part.text)
-    .join('\n\n');
-
-  content[0].text = fullText; // Update the initial text with merged content
-  // Remove duplicate text parts, keep images only
-  const imageParts = content.filter((part) => part.type === 'image_url');
-  content.splice(1, content.length); // Clear after first text
-  content.push(...imageParts); // Add images back
 
   return new HumanMessage({ content });
 }

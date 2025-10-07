@@ -10,8 +10,9 @@ export interface MessageModelDTO {
   kwargs: Kwargs;
 }
 export interface StructuredContent {
-  type: 'text' | 'image_url';
+  type: 'text' | 'image_url' | 'file';
   text?: string;
+  filename?: string;
   image_url?: ImageUrl;
 }
 
