@@ -1,390 +1,33 @@
 import { Router, Request } from 'express';
 import multer from 'multer';
 import { ChatOpenAI } from '@langchain/openai';
-import {
-  START,
-  END,
-  MessagesAnnotation,
-  StateGraph,
-} from '@langchain/langgraph';
-import {
-  ChatPromptTemplate,
-  MessagesPlaceholder,
-} from '@langchain/core/prompts';
-import {
-  DataContentBlock,
-  MessageContentComplex,
-  trimMessages,
-} from '@langchain/core/messages';
-import { HumanMessage, AIMessage } from '@langchain/core/messages';
-import { v4 as uuidv4 } from 'uuid';
-import {
-  type MessageModelDTO,
-  type MessageResponseDTO,
-  Role,
-} from '@monorepo/shared';
-import { MongoDBSaver } from '@langchain/langgraph-checkpoint-mongodb';
-import dbConnect from '../lib/mongoDB';
 import { getFormattedMessage } from '../utils/message-format';
-import { PDFLoader } from '@langchain/community/document_loaders/fs/pdf';
-import { DocxLoader } from '@langchain/community/document_loaders/fs/docx';
-import { CSVLoader } from '@langchain/community/document_loaders/fs/csv';
-import { TextLoader } from 'langchain/document_loaders/fs/text';
-import { JSONLoader } from 'langchain/document_loaders/fs/json';
-// @ts-ignore - Not support TS
-import { Blob } from 'blob-polyfill';
-import { Document } from '@langchain/core/documents';
+import { weatherTool } from '../chat-tools';
+import { ALLOWED_MIME_TYPES, AppMimeType } from '../chat-manager/utils';
+import { generateChatName } from '../chat-manager/generate-chat-name';
+import { ChatEngine } from '../chat-manager/chat-engine';
 
-// Interface for chat metadata
-interface ChatMetadata {
-  thread_id: string;
-  chat_name: string;
-  created_at: string;
-  updated_at: string;
-  message_count: number;
-}
-
-let checkpointer: MongoDBSaver;
-let chatMetadataCollection: any;
-
-async function initializeMongoDB() {
-  try {
-    const client = await dbConnect();
-
-    const dbName = 'user-chat-checkpoint';
-    checkpointer = new MongoDBSaver({ client, dbName });
-
-    // Initialize chat metadata collection
-    const db = client.db(dbName);
-    chatMetadataCollection = db.collection('chat_metadata');
-
-    // Create index for better performance
-    await chatMetadataCollection.createIndex(
-      { thread_id: 1 },
-      { unique: true }
-    );
-    await chatMetadataCollection.createIndex({ updated_at: -1 });
-
-    return { client, checkpointer, chatMetadataCollection };
-  } catch (error) {
-    console.error('Failed to connect to MongoDB:', error);
-    throw error;
-  }
-}
-
-const llm = new ChatOpenAI({
-  model: 'gpt-5-nano',
-  streaming: true,
-});
-
-const promptTemplate = ChatPromptTemplate.fromMessages([
-  {
-    role: 'system',
-    content:
-      'You are a helpful assistant. Response must be in markdown format, use all abilities of markdown to show more structured content.',
-  },
-  new MessagesPlaceholder('messages'),
-]);
-
-const trimmer = trimMessages({
-  maxTokens: 10000,
-  strategy: 'last',
-  tokenCounter: llm,
-  includeSystem: true,
-  allowPartial: false,
-});
-
-const callModel = async (state: typeof MessagesAnnotation.State) => {
-  try {
-    const trimmedMessages = await trimmer.invoke(state.messages);
-    const prompt = await promptTemplate.invoke({ messages: trimmedMessages });
-    const response = await llm.invoke(prompt);
-
-    return { messages: [response] };
-  } catch (error) {
-    console.error('Error in callModel:', error);
-    throw error;
-  }
-};
-
-const workflow = new StateGraph(MessagesAnnotation)
-  .addNode('model', callModel)
-  .addEdge(START, 'model')
-  .addEdge('model', END);
-
-let graph: ReturnType<(typeof workflow)['compile']>;
-
-async function initializeGraph() {
-  if (!checkpointer) {
-    await initializeMongoDB();
-  }
-  graph = workflow.compile({ checkpointer });
-  return graph;
-}
-
-const contentTypes = [
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'application/pdf',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'text/csv',
-  'text/plain',
-  'application/json',
-] as const;
-
-type AppMimeType = (typeof contentTypes)[number];
-const ALLOWED_MIME_TYPES = new Set(contentTypes);
-
-async function createHumanMessage(
-  text: string,
-  files?: Express.Multer.File[]
-): Promise<HumanMessage> {
-  const content: (MessageContentComplex | DataContentBlock)[] = [
-    { type: 'text', text: text },
-  ];
-
-  if (files) {
-    for (const file of files) {
-      const mime = (file.mimetype || '') as AppMimeType;
-      const isImage = mime.startsWith('image/');
-      const isAllowedDoc = ALLOWED_MIME_TYPES.has(mime as AppMimeType);
-
-      if (!isImage && !isAllowedDoc) {
-        continue;
-      }
-
-      if (isImage && file.buffer) {
-        const base64 = file.buffer.toString('base64');
-        content.push({
-          type: 'image_url',
-          image_url: { url: `data:${mime};base64,${base64}` },
-        });
-      } else {
-        try {
-          const buffer = file.buffer;
-          if (!buffer) continue;
-
-          const filename = file.originalname || 'unknown';
-          const blob = new Blob([buffer], { type: mime });
-          const createFileContent = (docs: Document<Record<string, any>>[]) => {
-            const extracted = docs
-              .map((doc: any) => doc.pageContent)
-              .join('\n\n');
-            content.push({
-              type: 'file',
-              filename,
-              text: `--- Content of ${filename} ---\n${extracted}`,
-            });
-          };
-          switch (mime) {
-            case 'application/pdf': {
-              const pdfLoader = new PDFLoader(blob, {
-                pdfjs: () => import('pdfjs-dist/legacy/build/pdf.mjs'),
-              });
-              const docs = await pdfLoader.load();
-              createFileContent(docs);
-              break;
-            }
-
-            case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': {
-              const docxLoader = new DocxLoader(blob);
-              const docs = await docxLoader.load();
-              createFileContent(docs);
-              break;
-            }
-
-            case 'text/csv': {
-              const csvLoader = new CSVLoader(blob);
-              const docs = await csvLoader.load();
-              createFileContent(docs);
-              break;
-            }
-
-            case 'text/plain': {
-              const textLoader = new TextLoader(blob);
-              const docs = await textLoader.load();
-              createFileContent(docs);
-              break;
-            }
-
-            case 'application/json': {
-              const jsonLoader = new JSONLoader(blob);
-              const docs = await jsonLoader.load();
-              createFileContent(docs);
-              break;
-            }
-
-            default:
-              break;
-          }
-        } catch (e) {
-          console.error(`Error extracting ${file.originalname}:`, e);
-        }
-      }
-    }
-  }
-
-  return new HumanMessage({ content });
-}
-
-// Function to generate chat names
-async function generateChatName(
-  userMessage: string,
-  aiResponse?: string
-): Promise<string> {
-  try {
-    const promptContent = aiResponse
-      ? `Based on this conversation, generate a short, descriptive chat title (max 5 words). User: "${userMessage.substring(0, 100)}" Assistant: "${aiResponse.substring(0, 100)}"`
-      : `Generate a short, descriptive title (max 5 words) for a chat starting with: "${userMessage.substring(0, 100)}"`;
-
-    const namingPrompt = ChatPromptTemplate.fromMessages([
-      {
-        role: 'system',
-        content:
-          'You are a helpful assistant that generates concise, descriptive chat titles. Respond with only the title, no additional text. Maximum 5 words.',
-      },
-      {
-        role: 'user',
-        content: promptContent,
-      },
-    ]);
-
-    const namingLlm = new ChatOpenAI({
-      model: 'gpt-3.5-turbo',
-      temperature: 0.7,
-    });
-
-    const response = await namingLlm.invoke(await namingPrompt.invoke({}));
-    let title = response.content.toString().trim();
-
-    // Clean up the title
-    title = title.replace(/["']/g, '').substring(0, 60);
-
-    return title || 'New Chat';
-  } catch (error) {
-    console.error('Error generating chat name:', error);
-    // Fallback: use first few words of user message
-    const words = userMessage.split(' ').slice(0, 4).join(' ');
-    return words || 'New Chat';
-  }
-}
-
-// Function to update chat metadata
-async function updateChatMetadata(
-  thread_id: string,
-  chat_name?: string,
-  isNewChat: boolean = false
-): Promise<void> {
-  if (!chatMetadataCollection) {
-    await initializeMongoDB();
-  }
-
-  const now = new Date().toISOString();
-
-  if (isNewChat && chat_name) {
-    // Create new chat metadata
-    await chatMetadataCollection.updateOne(
-      { thread_id },
-      {
-        $set: {
-          thread_id,
-          chat_name,
-          created_at: now,
-          updated_at: now,
-          message_count: 1,
-        },
-      },
-      { upsert: true }
-    );
-  } else {
-    // Update existing chat
-    const updateData: any = {
-      $inc: { message_count: 1 },
-      $set: { updated_at: now },
+// Helper function to safely serialize errors
+function serializeError(err: any): {
+  message: string;
+  stack?: string;
+  name?: string;
+} {
+  if (err instanceof Error) {
+    return {
+      message: err.message,
+      stack: err.stack,
+      name: err.name,
     };
-
-    if (chat_name) {
-      updateData.$set.chat_name = chat_name;
-    }
-
-    await chatMetadataCollection.updateOne({ thread_id }, updateData, {
-      upsert: true,
-    });
   }
+  return { message: String(err) };
 }
 
-// Function to get chat metadata
-async function getChatMetadata(
-  thread_id: string
-): Promise<ChatMetadata | null> {
-  if (!chatMetadataCollection) {
-    await initializeMongoDB();
-  }
-
-  return await chatMetadataCollection.findOne({ thread_id });
-}
-
-async function runMessage(thread_id: string, userMessage: HumanMessage) {
-  try {
-    if (!graph) {
-      await initializeGraph();
-    }
-
-    const config = { configurable: { thread_id } };
-    const input = { messages: [userMessage] };
-
-    const output = await graph.invoke(input, config);
-    return output.messages[output.messages.length - 1];
-  } catch (error) {
-    console.error('Error in runMessage:', error);
-    throw error;
-  }
-}
-
-// Streaming function
-async function* streamMessage(thread_id: string, userMessage: HumanMessage) {
-  try {
-    if (!graph) {
-      await initializeGraph();
-    }
-
-    const config = { configurable: { thread_id } };
-    const input = { messages: [userMessage] };
-
-    const stream = await graph.stream(input, {
-      ...config,
-      streamMode: 'messages',
-    });
-
-    for await (const [message, metadata] of stream) {
-      if (
-        message.constructor.name === Role.AIMessageChunk ||
-        (message as any).type === 'ai'
-      ) {
-        yield {
-          content: message.content,
-          role: Role.AIMessageChunk,
-          id: message.id,
-        };
-      }
-    }
-  } catch (error) {
-    console.error('Error in streamMessage:', error);
-    throw error;
-  }
-}
-
-const storage = multer.memoryStorage();
 const upload = multer({
-  storage,
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
 const router = Router();
-
-// Initialize MongoDB on startup
-initializeMongoDB().catch(console.error);
 
 interface MulterRequest extends Request {
   files?:
@@ -419,10 +62,21 @@ router.post(
           error: 'Only image, PDF, Word, CSV, TXT, JSON files are supported',
         });
       }
-
-      const userMessage = await createHumanMessage(message, files);
-      const thread_id = uuidv4();
       const isStream = stream === 'true';
+      const chatEngine = new ChatEngine(
+        new ChatOpenAI({
+          model: 'gpt-4o-mini',
+          streaming: isStream,
+        }),
+        {
+          tools: [weatherTool],
+        }
+      );
+
+      const agent = await chatEngine.initialize();
+
+      const userMessage = await agent.createHumanMessage(message, files);
+      const thread_id = agent.createUUID();
 
       if (isStream) {
         res.setHeader('Content-Type', 'text/event-stream');
@@ -436,7 +90,10 @@ router.post(
         );
 
         try {
-          for await (const chunk of streamMessage(thread_id, userMessage)) {
+          for await (const chunk of agent.streamMessage(
+            thread_id,
+            userMessage
+          )) {
             if (chunk.content) {
               fullResponse += chunk.content;
             }
@@ -447,21 +104,23 @@ router.post(
 
           // Generate and store chat name after streaming completes
           const chatName = await generateChatName(message, fullResponse);
-          await updateChatMetadata(thread_id, chatName, true);
+          await agent.updateChatMetadata(thread_id, chatName, true);
 
           res.write(
             `data: ${JSON.stringify({ type: 'done', thread_id, chat_name: chatName })}\n\n`
           );
           res.end();
         } catch (err) {
+          const safeError = serializeError(err);
+          console.error('Stream error in /chat/start:', safeError);
           res.write(
-            `data: ${JSON.stringify({ type: 'error', error: 'Stream error' })}\n\n`
+            `data: ${JSON.stringify({ type: 'error', error: safeError.message })}\n\n`
           );
           res.end();
         }
       } else {
         // Non-streaming response
-        const reply = await runMessage(thread_id, userMessage);
+        const reply = await agent.runMessage(thread_id, userMessage);
         const data = getFormattedMessage(reply.toJSON(), thread_id);
 
         // Generate and store chat name
@@ -469,7 +128,7 @@ router.post(
           message,
           reply.content.toString()
         );
-        await updateChatMetadata(thread_id, chatName, true);
+        await agent.updateChatMetadata(thread_id, chatName, true);
 
         // Include chat name in response
         const responseWithChatName = {
@@ -480,8 +139,9 @@ router.post(
         res.json(responseWithChatName);
       }
     } catch (err: any) {
-      console.error('Error in /chat/start:', err);
-      res.status(500).json({ error: err.message });
+      const safeError = serializeError(err);
+      console.error('Error in /chat/start:', safeError);
+      res.status(500).json({ error: safeError.message });
     }
   }
 );
@@ -515,9 +175,19 @@ router.post(
           error: 'Only image, PDF, Word, CSV, TXT, JSON files are supported',
         });
       }
-
-      const userMessage = await createHumanMessage(message, files);
       const isStream = stream === 'true';
+      const chatEngine = new ChatEngine(
+        new ChatOpenAI({
+          model: 'gpt-4o-mini',
+          streaming: isStream,
+        }),
+        {
+          tools: [weatherTool],
+        }
+      );
+      const agent = await chatEngine.initialize();
+
+      const userMessage = await agent.createHumanMessage(message, files);
 
       if (isStream) {
         res.setHeader('Content-Type', 'text/event-stream');
@@ -525,36 +195,42 @@ router.post(
         res.setHeader('Connection', 'keep-alive');
 
         try {
-          for await (const chunk of streamMessage(thread_id, userMessage)) {
+          for await (const chunk of agent.streamMessage(
+            thread_id,
+            userMessage
+          )) {
             res.write(
               `data: ${JSON.stringify({ type: 'chunk', ...chunk, thread_id })}\n\n`
             );
           }
 
           // Update chat metadata
-          await updateChatMetadata(thread_id);
+          await agent.updateChatMetadata(thread_id);
 
           res.write(`data: ${JSON.stringify({ type: 'done', thread_id })}\n\n`);
           res.end();
         } catch (err) {
+          const safeError = serializeError(err);
+          console.error('Stream error in /chat/continue:', safeError);
           res.write(
-            `data: ${JSON.stringify({ type: 'error', error: 'Stream error' })}\n\n`
+            `data: ${JSON.stringify({ type: 'error', error: safeError.message })}\n\n`
           );
           res.end();
         }
       } else {
         // Non-streaming response
-        const reply = await runMessage(thread_id, userMessage);
+        const reply = await agent.runMessage(thread_id, userMessage);
         const data = getFormattedMessage(reply.toJSON(), thread_id);
 
         // Update chat metadata
-        await updateChatMetadata(thread_id);
+        await agent.updateChatMetadata(thread_id);
 
         res.json(data);
       }
     } catch (err: any) {
-      console.error('Error in /chat/continue:', err);
-      res.status(500).json({ error: err.message });
+      const safeError = serializeError(err);
+      console.error('Error in /chat/continue:', safeError);
+      res.status(500).json({ error: safeError.message });
     }
   }
 );
@@ -567,87 +243,50 @@ router.get('/chat/:thread_id', async (req, res) => {
       return res.status(400).json({ error: 'thread_id required' });
     }
 
-    if (!graph) {
-      await initializeGraph();
-    }
+    const chatEngine = new ChatEngine(
+      new ChatOpenAI({
+        model: 'gpt-4o-mini',
+        streaming: false,
+      }),
+      {
+        tools: [weatherTool],
+      }
+    );
+    const agent = await chatEngine.initialize();
+    const threadDetails = await agent.getThreadDetails(thread_id);
 
-    const config = { configurable: { thread_id } };
-    const { values } = await graph.getState(config);
-
-    if (!values) {
+    if (!threadDetails) {
       return res.status(404).json({ error: 'Chat not found' });
     }
 
-    const messages: MessageResponseDTO[] = (
-      JSON.parse(JSON.stringify(values)).messages as MessageModelDTO[]
-    ).map((msg) => {
-      return getFormattedMessage(msg, thread_id);
-    });
-
-    // Get chat metadata
-    const chatMetadata = await getChatMetadata(thread_id);
-
-    res.json({
-      thread_id,
-      chat_name: chatMetadata?.chat_name || 'New Chat',
-      created_at: chatMetadata?.created_at,
-      updated_at: chatMetadata?.updated_at,
-      message_count: chatMetadata?.message_count || messages.length,
-      messages: messages,
-    });
+    res.json(threadDetails);
   } catch (err: any) {
-    console.error('Error in /chat/:thread_id:', err);
-    res.status(500).json({ error: err.message });
+    const safeError = serializeError(err);
+    console.error('Error in /chat/:thread_id:', safeError);
+    res.status(500).json({ error: safeError.message });
   }
 });
 
 // Get all chats list
 router.get('/chats', async (req, res) => {
   try {
-    if (!checkpointer || !chatMetadataCollection) {
-      await initializeMongoDB();
-    }
-
-    const chatMap = new Map<string, { thread_id: string; ts: string }>();
-
-    for await (const {
-      config,
-      checkpoint: { ts },
-    } of checkpointer.list({
-      configurable: {},
-    })) {
-      const threadId = config?.configurable?.thread_id;
-      if (threadId) {
-        if (!chatMap.has(threadId) || chatMap.get(threadId)!.ts < ts) {
-          chatMap.set(threadId, { thread_id: threadId, ts });
-        }
+    const chatEngine = new ChatEngine(
+      new ChatOpenAI({
+        model: 'gpt-4o-mini',
+        streaming: false,
+      }),
+      {
+        tools: [weatherTool],
       }
-    }
-
-    // Get chat metadata for all threads
-    const chatsWithMetadata = await Promise.all(
-      Array.from(chatMap.values()).map(async ({ thread_id, ts }) => {
-        const metadata = await getChatMetadata(thread_id);
-        return {
-          thread_id,
-          chat_name: metadata?.chat_name || 'New Chat',
-          created_at: metadata?.created_at,
-          updated_at: metadata?.updated_at || ts,
-          message_count: metadata?.message_count || 1,
-        };
-      })
     );
+    const agent = await chatEngine.initialize();
+    const chats = await agent.getThreadList();
 
-    // Sort by updated_at desc (latest first)
-    const sortedChats = chatsWithMetadata.sort(
-      (a, b) =>
-        new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-    );
-
-    res.json({ chats: sortedChats });
+    res.json({ chats });
   } catch (err: any) {
-    console.error('Error in /chats:', err);
-    res.status(500).json({ error: err.message });
+    const safeError = serializeError(err);
+    console.error('Error in /chats:', safeError);
+    res.status(500).json({ error: safeError.message });
   }
 });
 
@@ -667,12 +306,24 @@ router.patch('/chat/:thread_id/name', async (req, res) => {
       return res.status(400).json({ error: 'Chat name too long' });
     }
 
-    await updateChatMetadata(thread_id, chat_name, false);
+    const chatEngine = new ChatEngine(
+      new ChatOpenAI({
+        model: 'gpt-4o-mini',
+        streaming: false,
+      }),
+      {
+        tools: [weatherTool],
+      }
+    );
+    const agent = await chatEngine.initialize();
+
+    await agent.updateChatMetadata(thread_id, chat_name, false);
 
     res.json({ success: true, thread_id, chat_name });
   } catch (err: any) {
-    console.error('Error updating chat name:', err);
-    res.status(500).json({ error: err.message });
+    const safeError = serializeError(err);
+    console.error('Error updating chat name:', safeError);
+    res.status(500).json({ error: safeError.message });
   }
 });
 
@@ -684,23 +335,25 @@ router.delete('/chat/:thread_id', async (req, res) => {
       return res.status(400).json({ error: 'thread_id required' });
     }
 
-    if (!checkpointer || !chatMetadataCollection) {
-      await initializeMongoDB();
-    }
+    const chatEngine = new ChatEngine(
+      new ChatOpenAI({
+        model: 'gpt-4o-mini',
+        streaming: false,
+      }),
+      {
+        tools: [weatherTool],
+      }
+    );
+    const agent = await chatEngine.initialize();
 
-    await checkpointer.deleteThread(thread_id);
-    await chatMetadataCollection.deleteOne({ thread_id });
+    await agent.deleteThread(thread_id);
 
     res.json({ success: true, deleted: thread_id });
   } catch (err: any) {
-    console.error('Error in DELETE /chat/:thread_id:', err);
-    res.status(500).json({ error: err.message });
+    const safeError = serializeError(err);
+    console.error('Error in DELETE /chat/:thread_id:', safeError);
+    res.status(500).json({ error: safeError.message });
   }
-});
-
-process.on('SIGINT', async () => {
-  await (await dbConnect()).close();
-  process.exit(0);
 });
 
 export default router;

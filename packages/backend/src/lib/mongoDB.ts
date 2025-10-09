@@ -1,4 +1,5 @@
-import { MongoClient } from 'mongodb';
+import { MongoClient, Collection, Document as MongoDocument } from 'mongodb';
+import { MongoDBSaver } from '@langchain/langgraph-checkpoint-mongodb';
 
 declare global {
   var _mongo: {
@@ -43,3 +44,43 @@ async function dbConnect() {
 }
 
 export default dbConnect;
+
+let initializedInstance: {
+  client: MongoClient;
+  checkpointer: MongoDBSaver;
+  chatMetadataCollection: Collection<MongoDocument & any>;
+} | null = null;
+
+export const initializeMongoDB = async <M = object>(): Promise<{
+  client: MongoClient;
+  checkpointer: MongoDBSaver;
+  chatMetadataCollection: Collection<MongoDocument & M>;
+}> => {
+  try {
+    if (initializedInstance) {
+      return initializedInstance;
+    }
+    const client = await dbConnect();
+    const dbName = 'user-chat-checkpoint';
+    const checkpointer = new MongoDBSaver({ client, dbName });
+    const db = client.db(dbName);
+
+    const chatMetadataCollection = db.collection('chat_metadata') as Collection<
+      MongoDocument & M
+    >;
+    chatMetadataCollection;
+
+    await chatMetadataCollection.createIndex(
+      { thread_id: 1 },
+      { unique: true }
+    );
+    await chatMetadataCollection.createIndex({ updated_at: -1 });
+
+    initializedInstance = { client, checkpointer, chatMetadataCollection };
+
+    return { client, checkpointer, chatMetadataCollection };
+  } catch (error) {
+    console.error('Failed to connect to MongoDB:', error);
+    throw error;
+  }
+};

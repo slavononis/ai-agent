@@ -254,7 +254,7 @@ const _MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
                 {...props}
                 alt={'Image'}
                 src={props.src || props.alt}
-                className="max-w-md w-full h-auto rounded-md border border-color-border mt-4 mb-2 last:mb-0 shadow-sm"
+                className="w-auto max-w-md h-auto rounded-md border border-color-border mt-4 mb-2 last:mb-0 shadow-sm"
                 loading="lazy"
               />
             );

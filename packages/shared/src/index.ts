@@ -2,7 +2,17 @@ export enum Role {
   HumanMessage = 'HumanMessage',
   AIMessage = 'AIMessage',
   AIMessageChunk = 'AIMessageChunk',
+  ToolMessage = 'ToolMessage',
 }
+
+export interface ChatMetadata {
+  thread_id: string;
+  chat_name: string;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+}
+
 export interface MessageModelDTO {
   lc: number;
   type: 'constructor';
