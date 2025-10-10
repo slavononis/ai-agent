@@ -158,7 +158,7 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
               );
             },
           })
-        : continueProjectRequest({ message, thread_id: id! });
+        : continueProjectRequest({ message, thread_id: id!, files });
     },
     onSuccess: (data) => {
       if (!data) return;
@@ -318,7 +318,9 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
             size="icon"
             onClick={() => {
               scrollToBottom('smooth');
-              setAutoScrollEnabled(true); // Re-enable auto-scroll when user clicks the button
+              setTimeout(() => {
+                setAutoScrollEnabled(true); // Re-enable auto-scroll when user clicks the button
+              }, 1000);
             }}
             className="absolute top-6 right-5.5 z-50 rounded-full animate-bounce"
             aria-label="Scroll to bottom"

@@ -6,7 +6,9 @@
     "outDir": "dist",
     "strict": true,
     "esModuleInterop": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "moduleResolution": "bundler"
+    // "allowSyntheticDefaultImports": true
   },
   "include": ["src"]
 }

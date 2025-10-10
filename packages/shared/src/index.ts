@@ -1,3 +1,6 @@
+import { ChatOpenAI, OpenAIClient } from '@langchain/openai';
+import { ChatAnthropic, AnthropicMessagesModelId } from '@langchain/anthropic';
+
 export enum Role {
   HumanMessage = 'HumanMessage',
   AIMessage = 'AIMessage',
@@ -89,3 +92,30 @@ export interface TokenUsage {
 }
 
 export interface Additionalkwargs {}
+
+export type AIProvider = 'openai' | 'anthropic' | 'deepseek';
+
+export type OpenAIAllowedModels = Extract<
+  OpenAIClient.ChatModel,
+  | 'gpt-5'
+  | 'gpt-5-mini'
+  | 'gpt-5-nano'
+  | 'gpt-4'
+  | 'gpt-4o'
+  | 'gpt-4o-mini'
+  | 'gpt-3.5-turbo'
+  | 'codex-mini-latest'
+>;
+
+export type DeepSeekAllowedModels = 'deepseek-chat' | 'deepseek-reasoner';
+
+export type AnthropicAllowedModels =
+  | Extract<
+      AnthropicMessagesModelId,
+      | 'claude-sonnet-4-20250514'
+      | 'claude-3-7-sonnet-20250219'
+      | 'claude-opus-4-20250514'
+      | 'claude-3-5-haiku-20241022'
+    >
+  | 'claude-sonnet-4-5-20250929';
+export type AllowedModels = OpenAIAllowedModels | DeepSeekAllowedModels;

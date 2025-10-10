@@ -131,7 +131,7 @@ const CodeRenderer: React.FC<
 
 const _MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
   return (
-    <div className="overflow-hidden break-words">
+    <div className="break-words">
       <ReactMarkdown
         children={content}
         remarkPlugins={[remarkGfm, remarkMath]}
@@ -250,7 +250,7 @@ const _MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
                 {...props}
                 alt={'Image'}
                 src={props.src || props.alt}
-                className="w-full max-w-md h-auto rounded-md border border-color-border mt-4 mb-2 last:mb-0 shadow-sm"
+                className="max-w-xs w-full aspect-video object-cover rounded-md border border-color-border mt-4 mb-2 last:mb-0 shadow-sm"
                 loading="lazy"
               />
             );

@@ -7,6 +7,11 @@ import { ChatEngine } from '../chat-manager/chat-engine';
 import { generateChatName } from '../chat-manager/generate-chat-name';
 import { serializeError } from '../utils/error';
 
+const baseEngineOptions: ConstructorParameters<typeof ChatEngine>[0] = {
+  llmModel: 'gpt-4o-mini',
+  tools: [],
+  mode: 'user-project',
+};
 const router = Router();
 
 const upload = multer({
@@ -36,12 +41,7 @@ router.post('/chat/start', upload.array('file', 5), async (req, res) => {
         error: 'Only image, PDF, Word, CSV, TXT, JSON files are supported',
       });
     }
-    const chatEngine = new ChatEngine(
-      new ChatOpenAI({
-        model: 'gpt-4o',
-      }),
-      { tools: [], mode: 'user-project' }
-    );
+    const chatEngine = new ChatEngine(baseEngineOptions);
     const agent = await chatEngine.initialize();
 
     const userMessage = await agent.createHumanMessage(message, files);
@@ -90,12 +90,7 @@ router.post('/chat/continue', upload.array('file', 5), async (req, res) => {
         error: 'Only image, PDF, Word, CSV, TXT, JSON files are supported',
       });
     }
-    const chatEngine = new ChatEngine(
-      new ChatOpenAI({
-        model: 'gpt-4o',
-      }),
-      { tools: [], mode: 'user-project' }
-    );
+    const chatEngine = new ChatEngine(baseEngineOptions);
     const agent = await chatEngine.initialize();
 
     const userMessage = await agent.createHumanMessage(message, files);
@@ -119,12 +114,7 @@ router.get('/chat/:thread_id', async (req, res) => {
       return res.status(400).json({ error: 'thread_id required' });
     }
 
-    const chatEngine = new ChatEngine(
-      new ChatOpenAI({
-        model: 'gpt-4o',
-      }),
-      { tools: [], mode: 'user-project' }
-    );
+    const chatEngine = new ChatEngine(baseEngineOptions);
     const agent = await chatEngine.initialize();
     const threadDetails = await agent.getThreadDetails(thread_id);
 

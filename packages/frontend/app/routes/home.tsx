@@ -159,7 +159,7 @@ export default function Home() {
               );
             },
           })
-        : startProjectRequest({ message });
+        : startProjectRequest({ message, files });
     },
     onSuccess: (data, vars) => {
       if (!data) return;

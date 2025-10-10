@@ -7,12 +7,16 @@ import { ALLOWED_MIME_TYPES, AppMimeType } from '../chat-manager/utils';
 import { generateChatName } from '../chat-manager/generate-chat-name';
 import { ChatEngine } from '../chat-manager/chat-engine';
 import { serializeError } from '../utils/error';
-const tools = [tavilySearch];
-// Helper function to safely serialize errors
 
 const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 });
+
+const baseEngineOptions: ConstructorParameters<typeof ChatEngine>[0] = {
+  llmModel: 'gpt-4o-mini',
+  tools: [tavilySearch],
+  mode: 'user-chat',
+};
 
 const router = Router();
 
@@ -41,13 +45,7 @@ router.post('/chat/start', upload.array('file', 5), async (req, res) => {
       });
     }
     const isStream = stream === 'true';
-    const chatEngine = new ChatEngine(
-      new ChatOpenAI({
-        model: 'gpt-4o-mini',
-        streaming: isStream,
-      }),
-      { tools }
-    );
+    const chatEngine = new ChatEngine(baseEngineOptions);
 
     const agent = await chatEngine.initialize();
 
@@ -145,13 +143,7 @@ router.post('/chat/continue', upload.array('file', 5), async (req, res) => {
       });
     }
     const isStream = stream === 'true';
-    const chatEngine = new ChatEngine(
-      new ChatOpenAI({
-        model: 'gpt-4o-mini',
-        streaming: isStream,
-      }),
-      { tools }
-    );
+    const chatEngine = new ChatEngine(baseEngineOptions);
     const agent = await chatEngine.initialize();
 
     const userMessage = await agent.createHumanMessage(message, files);
@@ -206,13 +198,7 @@ router.get('/chat/:thread_id', async (req, res) => {
       return res.status(400).json({ error: 'thread_id required' });
     }
 
-    const chatEngine = new ChatEngine(
-      new ChatOpenAI({
-        model: 'gpt-4o-mini',
-        streaming: false,
-      }),
-      { tools }
-    );
+    const chatEngine = new ChatEngine(baseEngineOptions);
     const agent = await chatEngine.initialize();
     const threadDetails = await agent.getThreadDetails(thread_id);
 
@@ -231,13 +217,7 @@ router.get('/chat/:thread_id', async (req, res) => {
 // Get all chats list
 router.get('/chats', async (req, res) => {
   try {
-    const chatEngine = new ChatEngine(
-      new ChatOpenAI({
-        model: 'gpt-4o-mini',
-        streaming: false,
-      }),
-      { tools }
-    );
+    const chatEngine = new ChatEngine(baseEngineOptions);
     const agent = await chatEngine.initialize();
     const chats = await agent.getThreadList();
 
@@ -265,13 +245,7 @@ router.patch('/chat/:thread_id/name', async (req, res) => {
       return res.status(400).json({ error: 'Chat name too long' });
     }
 
-    const chatEngine = new ChatEngine(
-      new ChatOpenAI({
-        model: 'gpt-4o-mini',
-        streaming: false,
-      }),
-      { tools }
-    );
+    const chatEngine = new ChatEngine(baseEngineOptions);
     const agent = await chatEngine.initialize();
 
     await agent.updateChatMetadata(thread_id, chat_name, false);
@@ -292,13 +266,7 @@ router.delete('/chat/:thread_id', async (req, res) => {
       return res.status(400).json({ error: 'thread_id required' });
     }
 
-    const chatEngine = new ChatEngine(
-      new ChatOpenAI({
-        model: 'gpt-4o-mini',
-        streaming: false,
-      }),
-      { tools }
-    );
+    const chatEngine = new ChatEngine(baseEngineOptions);
     const agent = await chatEngine.initialize();
 
     await agent.deleteThread(thread_id);

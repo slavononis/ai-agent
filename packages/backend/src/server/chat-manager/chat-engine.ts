@@ -13,24 +13,24 @@ import {
 } from '@monorepo/shared';
 import { v4 as uuidv4 } from 'uuid';
 import { trimMessages } from '@langchain/core/messages';
-import { ChatAnthropic } from '@langchain/anthropic';
 import { ToolNode } from '@langchain/langgraph/prebuilt';
 import { Collection, Document as MongoDocument } from 'mongodb';
 import { HumanMessage, AIMessage } from '@langchain/core/messages';
-import { ChatOpenAI, ChatOpenAICallOptions } from '@langchain/openai';
 import { MongoDBSaver } from '@langchain/langgraph-checkpoint-mongodb';
 
 import { initializeMongoDB } from '../lib/mongoDB';
 import { getFormattedMessage } from '../utils/message-format';
 import { chatPromptTemplate, projectPromptTemplate } from './prompt';
 import { createHumanMessage } from './human-message';
-
-export class ChatEngine<
-  M extends
-    | ChatAnthropic
-    | ChatOpenAI<ChatOpenAICallOptions> = ChatOpenAI<ChatOpenAICallOptions>,
-> {
-  protected model: M;
+import { ProviderManager } from './model-manager';
+class ChatEngines {
+  constructor(
+    public options: { apiKey: string; timeout?: number },
+    public logger?: Console
+  ) {}
+}
+export class ChatEngine {
+  protected model: ProviderManager['provider'];
   protected tools: any[] = [];
   private checkpointer: MongoDBSaver | null = null;
   protected mode: Parameters<typeof initializeMongoDB>[0] = 'user-chat';
@@ -39,16 +39,14 @@ export class ChatEngine<
   > | null = null;
 
   constructor(
-    model: M,
-    {
-      tools,
-      mode = 'user-chat',
-    }: {
+    public params: {
       tools: any[];
+      llmModel: ProviderManager['model'];
       mode?: Parameters<typeof initializeMongoDB>[0];
     }
   ) {
-    this.model = model;
+    const { llmModel = 'gpt-4o-mini', tools, mode = 'user-chat' } = params;
+    this.model = new ProviderManager(llmModel).provider;
     this.mode = mode;
     this.tools = tools;
     this.checkpointer = null;
