@@ -45,27 +45,42 @@ async function dbConnect() {
 
 export default dbConnect;
 
-let initializedInstance: {
-  client: MongoClient;
-  checkpointer: MongoDBSaver;
-  chatMetadataCollection: Collection<MongoDocument & any>;
-} | null = null;
+type ConnectionType = 'user-chat' | 'user-project';
 
-export const initializeMongoDB = async <M = object>(): Promise<{
+let initializedInstance: Record<
+  ConnectionType,
+  {
+    client: MongoClient;
+    checkpointer: MongoDBSaver;
+    chatMetadataCollection: Collection<MongoDocument & any>;
+  } | null
+> = {
+  'user-chat': null,
+  'user-project': null,
+};
+
+export const initializeMongoDB = async <M = object>(
+  mode: ConnectionType
+): Promise<{
   client: MongoClient;
   checkpointer: MongoDBSaver;
   chatMetadataCollection: Collection<MongoDocument & M>;
 }> => {
+  const isUserChat = mode === 'user-chat';
   try {
-    if (initializedInstance) {
-      return initializedInstance;
+    const currentInstance = initializedInstance?.[mode] || null;
+    if (currentInstance) {
+      return currentInstance;
     }
     const client = await dbConnect();
-    const dbName = 'user-chat-checkpoint';
+    const dbName = isUserChat
+      ? 'user-chat-checkpoint'
+      : 'user-project-checkpoint';
+    const metaDBName = isUserChat ? 'chat_metadata' : 'project_metadata';
     const checkpointer = new MongoDBSaver({ client, dbName });
     const db = client.db(dbName);
 
-    const chatMetadataCollection = db.collection('chat_metadata') as Collection<
+    const chatMetadataCollection = db.collection(metaDBName) as Collection<
       MongoDocument & M
     >;
     chatMetadataCollection;
@@ -76,7 +91,11 @@ export const initializeMongoDB = async <M = object>(): Promise<{
     );
     await chatMetadataCollection.createIndex({ updated_at: -1 });
 
-    initializedInstance = { client, checkpointer, chatMetadataCollection };
+    initializedInstance[mode] = {
+      client,
+      checkpointer,
+      chatMetadataCollection,
+    };
 
     return { client, checkpointer, chatMetadataCollection };
   } catch (error) {

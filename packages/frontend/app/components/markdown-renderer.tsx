@@ -173,11 +173,6 @@ const _MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
               {children}
             </p>
           ),
-          // span: ({ children }) => (
-          //   <span className="text-color-muted-foreground text-xs font-body">
-          //     {children}
-          //   </span>
-          // ),
           ul: ({ children }) => (
             <ul className="list-disc list-inside mb-3.5 last:mb-0 text-color-muted-foreground text-sm/[21px]">
               {children}
@@ -255,7 +250,7 @@ const _MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
                 {...props}
                 alt={'Image'}
                 src={props.src || props.alt}
-                className="w-auto max-w-md h-auto rounded-md border border-color-border mt-4 mb-2 last:mb-0 shadow-sm"
+                className="w-full max-w-md h-auto rounded-md border border-color-border mt-4 mb-2 last:mb-0 shadow-sm"
                 loading="lazy"
               />
             );

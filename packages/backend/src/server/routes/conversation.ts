@@ -6,22 +6,9 @@ import { tavilySearch } from '../chat-tools';
 import { ALLOWED_MIME_TYPES, AppMimeType } from '../chat-manager/utils';
 import { generateChatName } from '../chat-manager/generate-chat-name';
 import { ChatEngine } from '../chat-manager/chat-engine';
+import { serializeError } from '../utils/error';
 const tools = [tavilySearch];
 // Helper function to safely serialize errors
-function serializeError(err: any): {
-  message: string;
-  stack?: string;
-  name?: string;
-} {
-  if (err instanceof Error) {
-    return {
-      message: err.message,
-      stack: err.stack,
-      name: err.name,
-    };
-  }
-  return { message: String(err) };
-}
 
 const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
@@ -29,207 +16,187 @@ const upload = multer({
 
 const router = Router();
 
-interface MulterRequest extends Request {
-  files?:
-    | Express.Multer.File[]
-    | { [fieldname: string]: Express.Multer.File[] };
-}
-
 // Start a new chat
-router.post(
-  '/chat/start',
-  upload.array('file', 5),
-  async (req: MulterRequest, res) => {
-    try {
-      const { message, stream = 'false' } = req.body;
-      const filesObj = req.files;
-      const files = Array.isArray(filesObj) ? filesObj : undefined;
+router.post('/chat/start', upload.array('file', 5), async (req, res) => {
+  try {
+    const { message, stream = 'false' } = req.body;
+    const filesObj = req.files;
+    const files = Array.isArray(filesObj) ? filesObj : undefined;
 
-      if (!message || typeof message !== 'string') {
-        return res.status(400).json({ error: 'Valid message required' });
-      }
+    if (!message || typeof message !== 'string') {
+      return res.status(400).json({ error: 'Valid message required' });
+    }
 
-      if (
-        files &&
-        files.length > 0 &&
-        files.some((file) => {
-          const mime = file.mimetype || '';
-          const isImage = mime.startsWith('image/');
-          return !isImage && !ALLOWED_MIME_TYPES.has(mime as AppMimeType);
-        })
-      ) {
-        return res.status(400).json({
-          error: 'Only image, PDF, Word, CSV, TXT, JSON files are supported',
-        });
-      }
-      const isStream = stream === 'true';
-      const chatEngine = new ChatEngine(
-        new ChatOpenAI({
-          model: 'gpt-4o-mini',
-          streaming: isStream,
-        }),
-        { tools }
+    if (
+      files &&
+      files.length > 0 &&
+      files.some((file) => {
+        const mime = file.mimetype || '';
+        const isImage = mime.startsWith('image/');
+        return !isImage && !ALLOWED_MIME_TYPES.has(mime as AppMimeType);
+      })
+    ) {
+      return res.status(400).json({
+        error: 'Only image, PDF, Word, CSV, TXT, JSON files are supported',
+      });
+    }
+    const isStream = stream === 'true';
+    const chatEngine = new ChatEngine(
+      new ChatOpenAI({
+        model: 'gpt-4o-mini',
+        streaming: isStream,
+      }),
+      { tools }
+    );
+
+    const agent = await chatEngine.initialize();
+
+    const userMessage = await agent.createHumanMessage(message, files);
+    const thread_id = agent.createUUID();
+
+    if (isStream) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+
+      let fullResponse = '';
+
+      res.write(
+        `data: ${JSON.stringify({ type: 'thread_id', thread_id })}\n\n`
       );
 
-      const agent = await chatEngine.initialize();
-
-      const userMessage = await agent.createHumanMessage(message, files);
-      const thread_id = agent.createUUID();
-
-      if (isStream) {
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
-
-        let fullResponse = '';
-
-        res.write(
-          `data: ${JSON.stringify({ type: 'thread_id', thread_id })}\n\n`
-        );
-
-        try {
-          for await (const chunk of agent.streamMessage(
-            thread_id,
-            userMessage
-          )) {
-            if (chunk.content) {
-              fullResponse += chunk.content;
-            }
-            res.write(
-              `data: ${JSON.stringify({ type: 'chunk', ...chunk, thread_id })}\n\n`
-            );
+      try {
+        for await (const chunk of agent.streamMessage(thread_id, userMessage)) {
+          if (chunk.content) {
+            fullResponse += chunk.content;
           }
-
-          // Generate and store chat name after streaming completes
-          const chatName = await generateChatName(message, fullResponse);
-          await agent.updateChatMetadata(thread_id, chatName, true);
-
           res.write(
-            `data: ${JSON.stringify({ type: 'done', thread_id, chat_name: chatName })}\n\n`
+            `data: ${JSON.stringify({ type: 'chunk', ...chunk, thread_id })}\n\n`
           );
-          res.end();
-        } catch (err) {
-          const safeError = serializeError(err);
-          console.error('Stream error in /chat/start:', safeError);
-          res.write(
-            `data: ${JSON.stringify({ type: 'error', error: safeError.message })}\n\n`
-          );
-          res.end();
         }
-      } else {
-        // Non-streaming response
-        const reply = await agent.runMessage(thread_id, userMessage);
-        const data = getFormattedMessage(reply.toJSON(), thread_id);
 
-        // Generate and store chat name
-        const chatName = await generateChatName(
-          message,
-          reply.content.toString()
-        );
+        // Generate and store chat name after streaming completes
+        const chatName = await generateChatName(message, fullResponse);
         await agent.updateChatMetadata(thread_id, chatName, true);
 
-        // Include chat name in response
-        const responseWithChatName = {
-          ...data,
-          chat_name: chatName,
-        };
-
-        res.json(responseWithChatName);
+        res.write(
+          `data: ${JSON.stringify({ type: 'done', thread_id, chat_name: chatName })}\n\n`
+        );
+        res.end();
+      } catch (err) {
+        const safeError = serializeError(err);
+        console.error('Stream error in /chat/start:', safeError);
+        res.write(
+          `data: ${JSON.stringify({ type: 'error', error: safeError.message })}\n\n`
+        );
+        res.end();
       }
-    } catch (err: any) {
-      const safeError = serializeError(err);
-      console.error('Error in /chat/start:', safeError);
-      res.status(500).json({ error: safeError.message });
+    } else {
+      // Non-streaming response
+      const reply = await agent.runMessage(thread_id, userMessage);
+      const data = getFormattedMessage(reply.toJSON(), thread_id);
+
+      // Generate and store chat name
+      const chatName = await generateChatName(
+        message,
+        reply.content.toString()
+      );
+      await agent.updateChatMetadata(thread_id, chatName, true);
+
+      // Include chat name in response
+      const responseWithChatName = {
+        ...data,
+        chat_name: chatName,
+      };
+
+      res.json(responseWithChatName);
     }
+  } catch (err: any) {
+    const safeError = serializeError(err);
+    console.error('Error in /chat/start:', safeError);
+    res.status(500).json({ error: safeError.message });
   }
-);
+});
 
 // Continue existing chat
-router.post(
-  '/chat/continue',
-  upload.array('file', 5),
-  async (req: MulterRequest, res) => {
-    try {
-      const { thread_id, message, stream = 'false' } = req.body;
-      const filesObj = req.files;
-      const files = Array.isArray(filesObj) ? filesObj : undefined;
+router.post('/chat/continue', upload.array('file', 5), async (req, res) => {
+  try {
+    const { thread_id, message, stream = 'false' } = req.body;
+    const filesObj = req.files;
+    const files = Array.isArray(filesObj) ? filesObj : undefined;
 
-      if (!thread_id || !message || typeof message !== 'string') {
-        return res
-          .status(400)
-          .json({ error: 'thread_id and valid message required' });
-      }
+    if (!thread_id || !message || typeof message !== 'string') {
+      return res
+        .status(400)
+        .json({ error: 'thread_id and valid message required' });
+    }
 
-      if (
-        files &&
-        files.length > 0 &&
-        files.some((file) => {
-          const mime = file.mimetype || '';
-          const isImage = mime.startsWith('image/');
-          return !isImage && !ALLOWED_MIME_TYPES.has(mime as AppMimeType);
-        })
-      ) {
-        return res.status(400).json({
-          error: 'Only image, PDF, Word, CSV, TXT, JSON files are supported',
-        });
-      }
-      const isStream = stream === 'true';
-      const chatEngine = new ChatEngine(
-        new ChatOpenAI({
-          model: 'gpt-4o-mini',
-          streaming: isStream,
-        }),
-        { tools }
-      );
-      const agent = await chatEngine.initialize();
+    if (
+      files &&
+      files.length > 0 &&
+      files.some((file) => {
+        const mime = file.mimetype || '';
+        const isImage = mime.startsWith('image/');
+        return !isImage && !ALLOWED_MIME_TYPES.has(mime as AppMimeType);
+      })
+    ) {
+      return res.status(400).json({
+        error: 'Only image, PDF, Word, CSV, TXT, JSON files are supported',
+      });
+    }
+    const isStream = stream === 'true';
+    const chatEngine = new ChatEngine(
+      new ChatOpenAI({
+        model: 'gpt-4o-mini',
+        streaming: isStream,
+      }),
+      { tools }
+    );
+    const agent = await chatEngine.initialize();
 
-      const userMessage = await agent.createHumanMessage(message, files);
+    const userMessage = await agent.createHumanMessage(message, files);
 
-      if (isStream) {
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
+    if (isStream) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
 
-        try {
-          for await (const chunk of agent.streamMessage(
-            thread_id,
-            userMessage
-          )) {
-            res.write(
-              `data: ${JSON.stringify({ type: 'chunk', ...chunk, thread_id })}\n\n`
-            );
-          }
-
-          // Update chat metadata
-          await agent.updateChatMetadata(thread_id);
-
-          res.write(`data: ${JSON.stringify({ type: 'done', thread_id })}\n\n`);
-          res.end();
-        } catch (err) {
-          const safeError = serializeError(err);
-          console.error('Stream error in /chat/continue:', safeError);
+      try {
+        for await (const chunk of agent.streamMessage(thread_id, userMessage)) {
           res.write(
-            `data: ${JSON.stringify({ type: 'error', error: safeError.message })}\n\n`
+            `data: ${JSON.stringify({ type: 'chunk', ...chunk, thread_id })}\n\n`
           );
-          res.end();
         }
-      } else {
-        // Non-streaming response
-        const reply = await agent.runMessage(thread_id, userMessage);
-        const data = getFormattedMessage(reply.toJSON(), thread_id);
 
         // Update chat metadata
         await agent.updateChatMetadata(thread_id);
 
-        res.json(data);
+        res.write(`data: ${JSON.stringify({ type: 'done', thread_id })}\n\n`);
+        res.end();
+      } catch (err) {
+        const safeError = serializeError(err);
+        console.error('Stream error in /chat/continue:', safeError);
+        res.write(
+          `data: ${JSON.stringify({ type: 'error', error: safeError.message })}\n\n`
+        );
+        res.end();
       }
-    } catch (err: any) {
-      const safeError = serializeError(err);
-      console.error('Error in /chat/continue:', safeError);
-      res.status(500).json({ error: safeError.message });
+    } else {
+      // Non-streaming response
+      const reply = await agent.runMessage(thread_id, userMessage);
+      const data = getFormattedMessage(reply.toJSON(), thread_id);
+
+      // Update chat metadata
+      await agent.updateChatMetadata(thread_id);
+
+      res.json(data);
     }
+  } catch (err: any) {
+    const safeError = serializeError(err);
+    console.error('Error in /chat/continue:', safeError);
+    res.status(500).json({ error: safeError.message });
   }
-);
+});
 
 // Get specific chat with messages
 router.get('/chat/:thread_id', async (req, res) => {

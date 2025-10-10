@@ -33,7 +33,11 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
+  const [isUserScrolling, setIsUserScrolling] = useState(false);
+  const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout>(null);
   const isChatMode = mode === Mode.Chat;
+
   const scrollToBottom = (behavior?: ScrollBehavior) => {
     messagesEndRef.current?.scrollIntoView({ behavior });
   };
@@ -47,6 +51,27 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
 
     // Show button when more than 150px from bottom
     setShowScrollButton(distanceFromBottom > 150);
+
+    // Enable auto-scroll if user is at the bottom (within 50px)
+    const isAtBottom = distanceFromBottom <= 50;
+    setAutoScrollEnabled(isAtBottom);
+  };
+
+  const handleUserScroll = () => {
+    // Clear any existing timeout
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
+    }
+
+    // Set user scrolling state
+    setIsUserScrolling(true);
+
+    // Set a timeout to reset user scrolling state after scroll ends
+    scrollTimeoutRef.current = setTimeout(() => {
+      setIsUserScrolling(false);
+    }, 200);
+
+    checkScrollPosition();
   };
 
   const { mutate, isPending } = useMutation({
@@ -147,7 +172,11 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
           };
         }
       );
-      scrollToBottom();
+
+      // Only auto-scroll if user hasn't manually scrolled up
+      if (autoScrollEnabled && !isUserScrolling) {
+        scrollToBottom();
+      }
     },
     onError: () => {
       displayToastError('Failed to send message. Please try again.');
@@ -176,25 +205,28 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
     enabled: (enabled) => !enabled.state.data?._initialThought && !!id,
   });
 
-  // Scroll down whenever messages change
+  // Scroll down whenever messages change, but only if auto-scroll is enabled
   useEffect(() => {
-    if (data?.messages.length) {
+    if (data?.messages.length && autoScrollEnabled && !isUserScrolling) {
       scrollToBottom();
     }
-  }, [data?.messages]);
+  }, [data?.messages, autoScrollEnabled, isUserScrolling]);
 
   // Add scroll event listener to check scroll position
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
 
-    container.addEventListener('scroll', checkScrollPosition);
+    container.addEventListener('scroll', handleUserScroll);
 
     // Initial check
     checkScrollPosition();
 
     return () => {
-      container.removeEventListener('scroll', checkScrollPosition);
+      container.removeEventListener('scroll', handleUserScroll);
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
     };
   }, []);
 
@@ -284,7 +316,10 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
         {showScrollButton && (
           <Button
             size="icon"
-            onClick={() => scrollToBottom('smooth')}
+            onClick={() => {
+              scrollToBottom('smooth');
+              setAutoScrollEnabled(true); // Re-enable auto-scroll when user clicks the button
+            }}
             className="absolute top-6 right-5.5 z-50 rounded-full animate-bounce"
             aria-label="Scroll to bottom"
           >

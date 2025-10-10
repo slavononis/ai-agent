@@ -151,6 +151,7 @@ export function ChatSidebar({
                         <AlertDialogAction
                           onClick={() => mutate(chat.thread_id)}
                           disabled={isPending}
+                          autoFocus
                         >
                           Delete
                         </AlertDialogAction>

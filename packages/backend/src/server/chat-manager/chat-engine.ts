@@ -22,7 +22,7 @@ import { MongoDBSaver } from '@langchain/langgraph-checkpoint-mongodb';
 
 import { initializeMongoDB } from '../lib/mongoDB';
 import { getFormattedMessage } from '../utils/message-format';
-import { chatPromptTemplate } from './prompt';
+import { chatPromptTemplate, projectPromptTemplate } from './prompt';
 import { createHumanMessage } from './human-message';
 
 export class ChatEngine<
@@ -33,6 +33,7 @@ export class ChatEngine<
   protected model: M;
   protected tools: any[] = [];
   private checkpointer: MongoDBSaver | null = null;
+  protected mode: Parameters<typeof initializeMongoDB>[0] = 'user-chat';
   private chatMetadataCollection: Collection<
     MongoDocument & ChatMetadata
   > | null = null;
@@ -41,11 +42,14 @@ export class ChatEngine<
     model: M,
     {
       tools,
+      mode = 'user-chat',
     }: {
       tools: any[];
+      mode?: Parameters<typeof initializeMongoDB>[0];
     }
   ) {
     this.model = model;
+    this.mode = mode;
     this.tools = tools;
     this.checkpointer = null;
     this.chatMetadataCollection = null;
@@ -56,7 +60,7 @@ export class ChatEngine<
   }
 
   async initialize() {
-    const res = await initializeMongoDB<ChatMetadata>();
+    const res = await initializeMongoDB<ChatMetadata>(this.mode);
     this.checkpointer = res.checkpointer;
     this.chatMetadataCollection = res.chatMetadataCollection;
     return this;
@@ -80,9 +84,12 @@ export class ChatEngine<
   async callModel(state: typeof MessagesAnnotation.State) {
     try {
       const trimmedMessages = await this.trimmer.invoke(state.messages);
-      const prompt = await chatPromptTemplate.invoke({
+      const currentPrompt =
+        this.mode === 'user-chat' ? chatPromptTemplate : projectPromptTemplate;
+      const prompt = await currentPrompt.invoke({
         messages: trimmedMessages,
       });
+
       const response = await this.llmWithTools.invoke(prompt);
 
       return { messages: [response] };
