@@ -2,11 +2,11 @@ import { Router, Request } from 'express';
 import multer from 'multer';
 import { ChatOpenAI } from '@langchain/openai';
 import { getFormattedMessage } from '../utils/message-format';
-import { weatherTool } from '../chat-tools';
+import { tavilySearch } from '../chat-tools';
 import { ALLOWED_MIME_TYPES, AppMimeType } from '../chat-manager/utils';
 import { generateChatName } from '../chat-manager/generate-chat-name';
 import { ChatEngine } from '../chat-manager/chat-engine';
-
+const tools = [tavilySearch];
 // Helper function to safely serialize errors
 function serializeError(err: any): {
   message: string;
@@ -68,9 +68,7 @@ router.post(
           model: 'gpt-4o-mini',
           streaming: isStream,
         }),
-        {
-          tools: [weatherTool],
-        }
+        { tools }
       );
 
       const agent = await chatEngine.initialize();
@@ -181,9 +179,7 @@ router.post(
           model: 'gpt-4o-mini',
           streaming: isStream,
         }),
-        {
-          tools: [weatherTool],
-        }
+        { tools }
       );
       const agent = await chatEngine.initialize();
 
@@ -248,9 +244,7 @@ router.get('/chat/:thread_id', async (req, res) => {
         model: 'gpt-4o-mini',
         streaming: false,
       }),
-      {
-        tools: [weatherTool],
-      }
+      { tools }
     );
     const agent = await chatEngine.initialize();
     const threadDetails = await agent.getThreadDetails(thread_id);
@@ -275,9 +269,7 @@ router.get('/chats', async (req, res) => {
         model: 'gpt-4o-mini',
         streaming: false,
       }),
-      {
-        tools: [weatherTool],
-      }
+      { tools }
     );
     const agent = await chatEngine.initialize();
     const chats = await agent.getThreadList();
@@ -311,9 +303,7 @@ router.patch('/chat/:thread_id/name', async (req, res) => {
         model: 'gpt-4o-mini',
         streaming: false,
       }),
-      {
-        tools: [weatherTool],
-      }
+      { tools }
     );
     const agent = await chatEngine.initialize();
 
@@ -340,9 +330,7 @@ router.delete('/chat/:thread_id', async (req, res) => {
         model: 'gpt-4o-mini',
         streaming: false,
       }),
-      {
-        tools: [weatherTool],
-      }
+      { tools }
     );
     const agent = await chatEngine.initialize();
 

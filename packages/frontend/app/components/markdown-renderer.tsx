@@ -179,7 +179,7 @@ const _MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
           //   </span>
           // ),
           ul: ({ children }) => (
-            <ul className="list-disc list-inside mb-3.5 last:mb-0 text-color-muted-foreground text-sm/[21px] font-body">
+            <ul className="list-disc list-inside mb-3.5 last:mb-0 text-color-muted-foreground text-sm/[21px]">
               {children}
             </ul>
           ),
@@ -188,6 +188,7 @@ const _MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
               {children}
             </ol>
           ),
+          li: ({ children }) => <li className="leading-relaxed">{children}</li>,
           em: ({ children }) => (
             <em className="text-color-foreground font-body">{children}</em>
           ),

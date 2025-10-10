@@ -7,6 +7,17 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "strict": true,
-    "outDir": "dist"
-  }
+    "outDir": "dist",
+    "disableSizeLimit": true,
+    "typeRoots": ["./node_modules/@types"],
+    "disableSourceOfProjectReferenceRedirect": true,
+    "noErrorTruncation": true,
+    "noEmitOnError": false
+  },
+  "exclude": [
+    "node_modules",
+    "mock-output",
+    "packages/frontend",
+    "packages/shared"
+  ]
 }
