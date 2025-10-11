@@ -1,7 +1,10 @@
 import api from '@/utils/axios.client';
 import {
+  type AnthropicAllowedModels,
+  type DeepSeekAllowedModels,
   type MessageResponseDTO,
   type MessagesResponseDTO,
+  type OpenAIAllowedModels,
 } from '@monorepo/shared';
 
 export const getProjectDetails = async ({
@@ -20,12 +23,15 @@ export const getProjectDetails = async ({
 export const startProjectRequest = async ({
   message,
   files,
+  model,
 }: {
   message: string;
   files?: File[];
+  model: OpenAIAllowedModels | AnthropicAllowedModels | DeepSeekAllowedModels;
 }) => {
   const formData = new FormData();
   formData.append('message', message);
+  formData.append('model', model);
   if (files && files.length > 0) {
     files.forEach((file) => {
       formData.append('file', file);
@@ -43,14 +49,17 @@ export const continueProjectRequest = async ({
   thread_id,
   message,
   files,
+  model,
 }: {
   thread_id: string;
   message: string;
   files?: File[];
+  model: OpenAIAllowedModels | AnthropicAllowedModels | DeepSeekAllowedModels;
 }) => {
   const formData = new FormData();
   formData.append('thread_id', thread_id);
   formData.append('message', message);
+  formData.append('model', model);
   if (files && files.length > 0) {
     files.forEach((file) => {
       formData.append('file', file);

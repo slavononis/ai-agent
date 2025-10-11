@@ -23,7 +23,7 @@ const router = Router();
 // Start a new chat
 router.post('/chat/start', upload.array('file', 5), async (req, res) => {
   try {
-    const { message, stream = 'false' } = req.body;
+    const { message, stream = 'false', model } = req.body;
     const filesObj = req.files;
     const files = Array.isArray(filesObj) ? filesObj : undefined;
 
@@ -45,7 +45,10 @@ router.post('/chat/start', upload.array('file', 5), async (req, res) => {
       });
     }
     const isStream = stream === 'true';
-    const chatEngine = new ChatEngine(baseEngineOptions);
+    const chatEngine = new ChatEngine({
+      ...baseEngineOptions,
+      llmModel: model,
+    });
 
     const agent = await chatEngine.initialize();
 
@@ -119,7 +122,7 @@ router.post('/chat/start', upload.array('file', 5), async (req, res) => {
 // Continue existing chat
 router.post('/chat/continue', upload.array('file', 5), async (req, res) => {
   try {
-    const { thread_id, message, stream = 'false' } = req.body;
+    const { thread_id, message, stream = 'false', model } = req.body;
     const filesObj = req.files;
     const files = Array.isArray(filesObj) ? filesObj : undefined;
 
@@ -143,7 +146,10 @@ router.post('/chat/continue', upload.array('file', 5), async (req, res) => {
       });
     }
     const isStream = stream === 'true';
-    const chatEngine = new ChatEngine(baseEngineOptions);
+    const chatEngine = new ChatEngine({
+      ...baseEngineOptions,
+      llmModel: model,
+    });
     const agent = await chatEngine.initialize();
 
     const userMessage = await agent.createHumanMessage(message, files);

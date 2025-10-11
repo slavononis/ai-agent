@@ -21,6 +21,7 @@ import { ChevronDown, Loader } from 'lucide-react';
 import _ from 'lodash';
 import { Skeleton } from './ui/skeleton';
 import { RoutesPath } from '@/utils/routes.config';
+import { useLLMModel } from '@/store';
 
 type ChatProps = {
   mode: Mode;
@@ -30,6 +31,7 @@ const chatRoles = [Role.AIMessage, Role.AIMessageChunk];
 export const Chat: React.FC<ChatProps> = ({ mode }) => {
   const { id } = useParams();
   const queryClient = useQueryClient();
+  const model = useLLMModel((state) => state.model);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -99,6 +101,7 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
       return isChatMode
         ? continueChatStream({
             message,
+            model,
             files,
             threadId: id!,
             onChunk: (chunk) => {
@@ -158,7 +161,7 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
               );
             },
           })
-        : continueProjectRequest({ message, thread_id: id!, files });
+        : continueProjectRequest({ message, thread_id: id!, files, model });
     },
     onSuccess: (data) => {
       if (!data) return;

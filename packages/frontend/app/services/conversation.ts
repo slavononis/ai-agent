@@ -1,8 +1,11 @@
 import api from '@/utils/axios.client';
 import {
   Role,
+  type AnthropicAllowedModels,
+  type DeepSeekAllowedModels,
   type MessageResponseDTO,
   type MessagesResponseDTO,
+  type OpenAIAllowedModels,
 } from '@monorepo/shared';
 
 export const getChatDetails = async ({ projectId }: { projectId: string }) => {
@@ -121,11 +124,13 @@ interface StreamChunk {
 export async function startChatStream({
   message,
   files,
+  model,
   onChunk,
   onThreadId,
   onError,
   onComplete,
 }: {
+  model: OpenAIAllowedModels | AnthropicAllowedModels | DeepSeekAllowedModels;
   message: string;
   files?: File[];
   onChunk: (data: StreamChunk) => void;
@@ -136,6 +141,7 @@ export async function startChatStream({
   try {
     const formData = new FormData();
     formData.append('message', message);
+    formData.append('model', model);
     formData.append('stream', 'true');
     if (files && files.length > 0) {
       files.forEach((file) => {
@@ -208,6 +214,7 @@ export async function continueChatStream({
   threadId,
   message,
   files,
+  model,
   onChunk,
   onError,
   onComplete,
@@ -215,6 +222,7 @@ export async function continueChatStream({
   threadId: string;
   message: string;
   files?: File[];
+  model: OpenAIAllowedModels | AnthropicAllowedModels | DeepSeekAllowedModels;
   onChunk: (data: StreamChunk) => void;
   onError?: (error: string) => void;
   onComplete?: () => void;
@@ -223,6 +231,7 @@ export async function continueChatStream({
     const formData = new FormData();
     formData.append('thread_id', threadId);
     formData.append('message', message);
+    formData.append('model', model);
     formData.append('stream', 'true');
     if (files && files.length > 0) {
       files.forEach((file) => {

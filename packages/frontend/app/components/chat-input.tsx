@@ -15,6 +15,7 @@ import { Card, CardContent, CardFooter } from './ui/card';
 import SpeechRecognition, {
   useSpeechRecognition,
 } from 'react-speech-recognition';
+import { LLMSelect } from './LLM-Select';
 
 type ChatInputProps = {
   onSend?: (message: string, files: File[] | null) => void;
@@ -167,7 +168,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       </CardContent>
 
       <CardFooter className="gap-2 pt-0 justify-between items-start">
-        <div className="flex gap-2 min-w-0">
+        <div className="flex gap-2 min-w-0 flex-wrap">
           <div className="flex items-start gap-2">
             <Button
               size="icon"
@@ -189,10 +190,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               multiple
               style={{ display: 'none' }}
             />
+            <LLMSelect />
           </div>
 
           {files.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-2 overflow-auto max-h-15">
+            <div className="flex flex-wrap gap-2 overflow-auto max-h-15">
               {previews.map(({ file, url, isImage }, idx) => (
                 <div
                   key={`${file.name}-${file.size}-${file.lastModified}-${idx}`}

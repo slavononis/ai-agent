@@ -20,7 +20,7 @@ const upload = multer({
 
 router.post('/chat/start', upload.array('file', 5), async (req, res) => {
   try {
-    const { message } = req.body;
+    const { message, model } = req.body;
     const filesObj = req.files;
     const files = Array.isArray(filesObj) ? filesObj : undefined;
 
@@ -41,7 +41,10 @@ router.post('/chat/start', upload.array('file', 5), async (req, res) => {
         error: 'Only image, PDF, Word, CSV, TXT, JSON files are supported',
       });
     }
-    const chatEngine = new ChatEngine(baseEngineOptions);
+    const chatEngine = new ChatEngine({
+      ...baseEngineOptions,
+      llmModel: model,
+    });
     const agent = await chatEngine.initialize();
 
     const userMessage = await agent.createHumanMessage(message, files);
@@ -67,7 +70,7 @@ router.post('/chat/start', upload.array('file', 5), async (req, res) => {
 
 router.post('/chat/continue', upload.array('file', 5), async (req, res) => {
   try {
-    const { thread_id, message } = req.body;
+    const { thread_id, message, model } = req.body;
     const filesObj = req.files;
     const files = Array.isArray(filesObj) ? filesObj : undefined;
 
@@ -90,7 +93,10 @@ router.post('/chat/continue', upload.array('file', 5), async (req, res) => {
         error: 'Only image, PDF, Word, CSV, TXT, JSON files are supported',
       });
     }
-    const chatEngine = new ChatEngine(baseEngineOptions);
+    const chatEngine = new ChatEngine({
+      ...baseEngineOptions,
+      llmModel: model,
+    });
     const agent = await chatEngine.initialize();
 
     const userMessage = await agent.createHumanMessage(message, files);

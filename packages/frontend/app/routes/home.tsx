@@ -18,6 +18,7 @@ import {
 import { useState } from 'react';
 import { startChatStream, type ChatListItem } from '@/services/conversation';
 import { setStructuralContent } from '@/utils/chat-formatter';
+import { useLLMModel } from '@/store';
 export function meta({}: Route.MetaArgs) {
   return [
     { title: 'New React Router App' },
@@ -34,6 +35,8 @@ export default function Home() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<Mode>(Mode.Chat);
+  const model = useLLMModel((state) => state.model);
+
   const isChatMode = mode === Mode.Chat;
   const { mutate, isPending } = useMutation({
     mutationKey: getChatQueryKey('new-thread', mode),
@@ -42,6 +45,7 @@ export default function Home() {
 
       return isChatMode
         ? startChatStream({
+            model,
             message,
             files,
             onChunk: (chunk) => {
@@ -159,7 +163,7 @@ export default function Home() {
               );
             },
           })
-        : startProjectRequest({ message, files });
+        : startProjectRequest({ message, files, model });
     },
     onSuccess: (data, vars) => {
       if (!data) return;
