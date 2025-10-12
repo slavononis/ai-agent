@@ -1,7 +1,5 @@
-import { Router, Request } from 'express';
+import { Router } from 'express';
 import multer from 'multer';
-import { ChatOpenAI } from '@langchain/openai';
-import { getFormattedMessage } from '../utils/message-format';
 import { tavilySearch } from '../chat-tools';
 import { ALLOWED_MIME_TYPES, AppMimeType } from '../chat-manager/utils';
 import { generateChatName } from '../chat-manager/generate-chat-name';
@@ -23,7 +21,7 @@ const router = Router();
 // Start a new chat
 router.post('/chat/start', upload.array('file', 5), async (req, res) => {
   try {
-    const { message, stream = 'false', model } = req.body;
+    const { message, model } = req.body;
     const filesObj = req.files;
     const files = Array.isArray(filesObj) ? filesObj : undefined;
 
@@ -44,7 +42,6 @@ router.post('/chat/start', upload.array('file', 5), async (req, res) => {
         error: 'Only image, PDF, Word, CSV, TXT, JSON files are supported',
       });
     }
-    const isStream = stream === 'true';
     const chatEngine = new ChatEngine({
       ...baseEngineOptions,
       llmModel: model,
@@ -55,18 +52,16 @@ router.post('/chat/start', upload.array('file', 5), async (req, res) => {
     const userMessage = await agent.createHumanMessage(message, files);
     const thread_id = agent.createUUID();
 
-    if (isStream) {
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
 
-      let fullResponse = '';
+    let fullResponse = '';
 
-      res.write(
-        `data: ${JSON.stringify({ type: 'thread_id', thread_id })}\n\n`
-      );
+    res.write(`data: ${JSON.stringify({ type: 'thread_id', thread_id })}\n\n`);
 
-      try {
+    try {
+      if (agent.isStreaming) {
         for await (const chunk of agent.streamMessage(thread_id, userMessage)) {
           if (chunk.content) {
             fullResponse += chunk.content;
@@ -75,54 +70,47 @@ router.post('/chat/start', upload.array('file', 5), async (req, res) => {
             `data: ${JSON.stringify({ type: 'chunk', ...chunk, thread_id })}\n\n`
           );
         }
-
-        // Generate and store chat name after streaming completes
-        const chatName = await generateChatName(message, fullResponse);
-        await agent.updateChatMetadata(thread_id, chatName, true);
-
-        res.write(
-          `data: ${JSON.stringify({ type: 'done', thread_id, chat_name: chatName })}\n\n`
-        );
-        res.end();
-      } catch (err) {
-        const safeError = serializeError(err);
-        console.error('Stream error in /chat/start:', safeError);
-        res.write(
-          `data: ${JSON.stringify({ type: 'error', error: safeError.message })}\n\n`
-        );
-        res.end();
+      } else {
+        for await (const chunk of agent.runMessageChunk(
+          thread_id,
+          userMessage
+        )) {
+          if (chunk.content) {
+            fullResponse += chunk.content;
+          }
+          res.write(
+            `data: ${JSON.stringify({ type: 'chunk', ...chunk, thread_id })}\n\n`
+          );
+        }
       }
-    } else {
-      // Non-streaming response
-      const reply = await agent.runMessage(thread_id, userMessage);
-      const data = getFormattedMessage(reply.toJSON(), thread_id);
 
-      // Generate and store chat name
-      const chatName = await generateChatName(
-        message,
-        reply.content.toString()
-      );
+      // Generate and store chat name after streaming completes
+      const chatName = await generateChatName(message, fullResponse);
       await agent.updateChatMetadata(thread_id, chatName, true);
 
-      // Include chat name in response
-      const responseWithChatName = {
-        ...data,
-        chat_name: chatName,
-      };
-
-      res.json(responseWithChatName);
+      res.write(
+        `data: ${JSON.stringify({ type: 'done', thread_id, chat_name: chatName })}\n\n`
+      );
+      return res.end();
+    } catch (err) {
+      const safeError = serializeError(err);
+      console.error('Stream error in /chat/start:', safeError);
+      res.write(
+        `data: ${JSON.stringify({ type: 'error', error: safeError.message })}\n\n`
+      );
+      return res.end();
     }
   } catch (err: any) {
     const safeError = serializeError(err);
     console.error('Error in /chat/start:', safeError);
-    res.status(500).json({ error: safeError.message });
+    return res.status(500).json({ error: safeError.message });
   }
 });
 
 // Continue existing chat
 router.post('/chat/continue', upload.array('file', 5), async (req, res) => {
   try {
-    const { thread_id, message, stream = 'false', model } = req.body;
+    const { thread_id, message, model } = req.body;
     const filesObj = req.files;
     const files = Array.isArray(filesObj) ? filesObj : undefined;
 
@@ -145,54 +133,54 @@ router.post('/chat/continue', upload.array('file', 5), async (req, res) => {
         error: 'Only image, PDF, Word, CSV, TXT, JSON files are supported',
       });
     }
-    const isStream = stream === 'true';
     const chatEngine = new ChatEngine({
       ...baseEngineOptions,
       llmModel: model,
     });
+
     const agent = await chatEngine.initialize();
 
     const userMessage = await agent.createHumanMessage(message, files);
 
-    if (isStream) {
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
 
-      try {
+    try {
+      if (agent.isStreaming) {
         for await (const chunk of agent.streamMessage(thread_id, userMessage)) {
           res.write(
             `data: ${JSON.stringify({ type: 'chunk', ...chunk, thread_id })}\n\n`
           );
         }
-
-        // Update chat metadata
-        await agent.updateChatMetadata(thread_id);
-
-        res.write(`data: ${JSON.stringify({ type: 'done', thread_id })}\n\n`);
-        res.end();
-      } catch (err) {
-        const safeError = serializeError(err);
-        console.error('Stream error in /chat/continue:', safeError);
-        res.write(
-          `data: ${JSON.stringify({ type: 'error', error: safeError.message })}\n\n`
-        );
-        res.end();
+      } else {
+        for await (const chunk of agent.runMessageChunk(
+          thread_id,
+          userMessage
+        )) {
+          res.write(
+            `data: ${JSON.stringify({ type: 'chunk', ...chunk, thread_id })}\n\n`
+          );
+        }
       }
-    } else {
-      // Non-streaming response
-      const reply = await agent.runMessage(thread_id, userMessage);
-      const data = getFormattedMessage(reply.toJSON(), thread_id);
 
       // Update chat metadata
       await agent.updateChatMetadata(thread_id);
 
-      res.json(data);
+      res.write(`data: ${JSON.stringify({ type: 'done', thread_id })}\n\n`);
+      return res.end();
+    } catch (err) {
+      const safeError = serializeError(err);
+      console.error('Stream error in /chat/continue:', safeError);
+      res.write(
+        `data: ${JSON.stringify({ type: 'error', error: safeError.message })}\n\n`
+      );
+      return res.end();
     }
   } catch (err: any) {
     const safeError = serializeError(err);
     console.error('Error in /chat/continue:', safeError);
-    res.status(500).json({ error: safeError.message });
+    return res.status(500).json({ error: safeError.message });
   }
 });
 
@@ -212,26 +200,26 @@ router.get('/chat/:thread_id', async (req, res) => {
       return res.status(404).json({ error: 'Chat not found' });
     }
 
-    res.json(threadDetails);
+    return res.json(threadDetails);
   } catch (err: any) {
     const safeError = serializeError(err);
     console.error('Error in /chat/:thread_id:', safeError);
-    res.status(500).json({ error: safeError.message });
+    return res.status(500).json({ error: safeError.message });
   }
 });
 
 // Get all chats list
-router.get('/chats', async (req, res) => {
+router.get('/chats', async (_req, res) => {
   try {
     const chatEngine = new ChatEngine(baseEngineOptions);
     const agent = await chatEngine.initialize();
     const chats = await agent.getThreadList();
 
-    res.json({ chats });
+    return res.json({ chats });
   } catch (err: any) {
     const safeError = serializeError(err);
     console.error('Error in /chats:', safeError);
-    res.status(500).json({ error: safeError.message });
+    return res.status(500).json({ error: safeError.message });
   }
 });
 
@@ -256,11 +244,11 @@ router.patch('/chat/:thread_id/name', async (req, res) => {
 
     await agent.updateChatMetadata(thread_id, chat_name, false);
 
-    res.json({ success: true, thread_id, chat_name });
+    return res.json({ success: true, thread_id, chat_name });
   } catch (err: any) {
     const safeError = serializeError(err);
     console.error('Error updating chat name:', safeError);
-    res.status(500).json({ error: safeError.message });
+    return res.status(500).json({ error: safeError.message });
   }
 });
 
@@ -277,11 +265,11 @@ router.delete('/chat/:thread_id', async (req, res) => {
 
     await agent.deleteThread(thread_id);
 
-    res.json({ success: true, deleted: thread_id });
+    return res.json({ success: true, deleted: thread_id });
   } catch (err: any) {
     const safeError = serializeError(err);
     console.error('Error in DELETE /chat/:thread_id:', safeError);
-    res.status(500).json({ error: safeError.message });
+    return res.status(500).json({ error: safeError.message });
   }
 });
 

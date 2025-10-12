@@ -33,70 +33,6 @@ export const getChatsListRequest = async () => {
     });
 };
 
-export const startChatRequest = async ({
-  message,
-  images,
-}: {
-  message: string;
-  images?: File[];
-}) => {
-  if (images && images.length > 0) {
-    const formData = new FormData();
-    formData.append('message', message);
-    images.forEach((image) => {
-      formData.append('image', image);
-    });
-    return api
-      .post<MessageResponseDTO>('/api/conversation/chat/start', formData)
-      .then((res) => res.data)
-      .catch((err) => {
-        throw err;
-      });
-  } else {
-    return api
-      .post<MessageResponseDTO>('/api/conversation/chat/start', { message })
-      .then((res) => res.data)
-      .catch((err) => {
-        throw err;
-      });
-  }
-};
-
-export const continueChatRequest = async ({
-  thread_id,
-  message,
-  images,
-}: {
-  thread_id: string;
-  message: string;
-  images?: File[];
-}) => {
-  if (images && images.length > 0) {
-    const formData = new FormData();
-    formData.append('thread_id', thread_id);
-    formData.append('message', message);
-    images.forEach((image) => {
-      formData.append('image', image);
-    });
-    return api
-      .post<MessageResponseDTO>('/api/conversation/chat/continue', formData)
-      .then((res) => res.data)
-      .catch((err) => {
-        throw err;
-      });
-  } else {
-    return api
-      .post<MessageResponseDTO>('/api/conversation/chat/continue', {
-        thread_id,
-        message,
-      })
-      .then((res) => res.data)
-      .catch((err) => {
-        throw err;
-      });
-  }
-};
-
 export const deleteChatRequest = async (thread_id: string) => {
   return api
     .delete<{ success: boolean; deleted: string }>(
@@ -142,7 +78,6 @@ export async function startChatStream({
     const formData = new FormData();
     formData.append('message', message);
     formData.append('model', model);
-    formData.append('stream', 'true');
     if (files && files.length > 0) {
       files.forEach((file) => {
         formData.append('file', file);
@@ -232,7 +167,6 @@ export async function continueChatStream({
     formData.append('thread_id', threadId);
     formData.append('message', message);
     formData.append('model', model);
-    formData.append('stream', 'true');
     if (files && files.length > 0) {
       files.forEach((file) => {
         formData.append('file', file);

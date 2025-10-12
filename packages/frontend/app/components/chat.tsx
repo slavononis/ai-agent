@@ -57,7 +57,7 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
 
     setShowScrollButton(distanceFromBottom > 700);
 
-    setAutoScrollEnabled(distanceFromBottom <= 300);
+    setAutoScrollEnabled(distanceFromBottom <= 20);
   };
 
   const handleUserScroll = () => {
@@ -67,7 +67,6 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
     checkScrollPosition();
   };
 
-  // ✅ Unified scroll handler (combines both functionalities)
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     handleUserScroll();
 
@@ -96,7 +95,6 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
     });
   };
 
-  // ✅ Mutation (send message)
   const { mutate, isPending } = useMutation({
     mutationKey: getChatQueryKey(id!, mode),
     mutationFn: ({ message, files }: { message: string; files?: File[] }) => {
@@ -194,7 +192,6 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
     },
   });
 
-  // ✅ Query (load messages)
   const { data, isLoading, error } = useQuery({
     queryKey: getChatQueryKey(id!, mode),
     queryFn: () =>
@@ -206,14 +203,12 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
 
   const messages = useMemo(() => data?.messages || [], [data?.messages]);
 
-  // ✅ Scroll on message change
   useEffect(() => {
     if (messages.length && autoScrollEnabled && !isUserScrolling) {
       scrollToBottom();
     }
   }, [messages, autoScrollEnabled, isUserScrolling]);
 
-  // ✅ Cleanup scroll timeout
   useEffect(() => {
     return () => {
       if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);

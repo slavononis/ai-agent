@@ -29,6 +29,7 @@ export class ChatEngine {
   protected tools: any[] = [];
   private checkpointer: MongoDBSaver | null = null;
   protected mode: Parameters<typeof initializeMongoDB>[0] = 'user-chat';
+  public isStreaming: boolean = false;
   private chatMetadataCollection: Collection<
     MongoDocument & ChatMetadata
   > | null = null;
@@ -46,6 +47,7 @@ export class ChatEngine {
     this.tools = tools;
     this.checkpointer = null;
     this.chatMetadataCollection = null;
+    this.isStreaming = this.model.streaming;
 
     // Bind methods to preserve 'this' context
     this.callModel = this.callModel.bind(this);
@@ -148,6 +150,77 @@ export class ChatEngine {
     }
   }
 
+  async *runMessageChunk(thread_id: string, userMessage: HumanMessage) {
+    try {
+      const config = this.config(thread_id);
+      const input = this.userInput(userMessage);
+
+      const output = await this.graph.invoke(input, config);
+      const lastMessageRaw = output.messages[output.messages.length - 1];
+
+      if (isAIMessage(lastMessageRaw)) {
+        const lastMessage = Array.isArray(lastMessageRaw.content)
+          ? lastMessageRaw.content?.[0]?.type === 'text'
+            ? (lastMessageRaw.content?.[0]?.text as string)
+            : ''
+          : lastMessageRaw.content;
+
+        // Emulate streaming by splitting into parts that preserve original whitespace/formatting
+        const parts = lastMessage.split(/(\s+)/);
+        const chunkSize = 5; // Number of words per chunk; adjust as needed
+        const delayMs = 100; // Delay between chunks in ms; adjust for pacing (e.g., 50 for faster, 200 for slower)
+
+        let chunkStart = 0;
+        while (chunkStart < parts.length) {
+          const chunkParts: string[] = [];
+          let wordsInChunk = 0;
+          let chunkEnd = chunkStart;
+
+          // Collect up to chunkSize words and the whitespace between them
+          while (chunkEnd < parts.length && wordsInChunk < chunkSize) {
+            const part = parts[chunkEnd];
+            chunkParts.push(part);
+            if (!/\s/.test(part)) {
+              // It's a non-whitespace part (word)
+              wordsInChunk++;
+            }
+            chunkEnd++;
+          }
+
+          // If we hit exactly chunkSize words and ended on a word (with potential following whitespace),
+          // include the next whitespace separator if it's not the end
+          if (
+            wordsInChunk === chunkSize &&
+            chunkEnd < parts.length &&
+            /\s/.test(parts[chunkEnd])
+          ) {
+            chunkParts.push(parts[chunkEnd]);
+            chunkEnd++;
+          }
+
+          // Only yield if we have some content (e.g., skip pure whitespace chunks)
+          const chunkContent = chunkParts.join('');
+          if (chunkContent.trim().length > 0 || chunkParts.length > 0) {
+            yield {
+              content: chunkContent,
+              role: Role.AIMessageChunk,
+              id: lastMessageRaw.id, // Reuse the same ID across chunks
+            };
+          }
+
+          chunkStart = chunkEnd;
+
+          // Add delay between chunks to simulate real-time streaming (skip for last chunk if desired)
+          if (chunkStart < parts.length) {
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error in runMessage:', error);
+      throw error;
+    }
+  }
   async *streamMessage(thread_id: string, userMessage: HumanMessage) {
     try {
       const config = this.config(thread_id);
@@ -158,16 +231,17 @@ export class ChatEngine {
         streamMode: 'messages',
       });
 
-      for await (const [message] of stream) {
-        if (
-          isAIMessage(message)
-          // message.constructor.name === Role.AIMessageChunk ||
-          // (message as any).type === 'ai'
-        ) {
+      for await (const [rawMessage] of stream) {
+        if (isAIMessage(rawMessage)) {
+          const message = Array.isArray(rawMessage.content)
+            ? rawMessage.content?.[0]?.type === 'text'
+              ? (rawMessage.content?.[0]?.text as string)
+              : ''
+            : rawMessage.content;
           yield {
-            content: message.content,
+            content: message,
             role: Role.AIMessageChunk,
-            id: message.id,
+            id: rawMessage.id,
           };
         }
       }
