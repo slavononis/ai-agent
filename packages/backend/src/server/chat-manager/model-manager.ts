@@ -1,4 +1,4 @@
-import { ChatOpenAI, OpenAIChatModelId } from '@langchain/openai';
+import { ChatOpenAI } from '@langchain/openai';
 import { ChatAnthropic } from '@langchain/anthropic';
 import { ChatDeepSeek } from '../custom-models';
 import {
@@ -15,7 +15,6 @@ export const openAIModels: Record<OpenAIAllowedModels, typeof ChatOpenAI> = {
   'gpt-4o': ChatOpenAI,
   'gpt-4o-mini': ChatOpenAI,
   'gpt-3.5-turbo': ChatOpenAI,
-  'codex-mini-latest': ChatOpenAI,
 };
 
 export const deepSeekModels: Record<

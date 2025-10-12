@@ -12,10 +12,10 @@ import {
   type MessageResponseDTO,
 } from '@monorepo/shared';
 import { v4 as uuidv4 } from 'uuid';
-import { trimMessages } from '@langchain/core/messages';
+import { isAIMessage, trimMessages } from '@langchain/core/messages';
 import { ToolNode } from '@langchain/langgraph/prebuilt';
 import { Collection, Document as MongoDocument } from 'mongodb';
-import { HumanMessage, AIMessage } from '@langchain/core/messages';
+import { HumanMessage } from '@langchain/core/messages';
 import { MongoDBSaver } from '@langchain/langgraph-checkpoint-mongodb';
 
 import { initializeMongoDB } from '../lib/mongoDB';
@@ -23,12 +23,7 @@ import { getFormattedMessage } from '../utils/message-format';
 import { chatPromptTemplate, projectPromptTemplate } from './prompt';
 import { createHumanMessage } from './human-message';
 import { ProviderManager } from './model-manager';
-class ChatEngines {
-  constructor(
-    public options: { apiKey: string; timeout?: number },
-    public logger?: Console
-  ) {}
-}
+
 export class ChatEngine {
   protected model: ProviderManager['provider'];
   protected tools: any[] = [];
@@ -163,10 +158,11 @@ export class ChatEngine {
         streamMode: 'messages',
       });
 
-      for await (const [message, metadata] of stream) {
+      for await (const [message] of stream) {
         if (
-          message.constructor.name === Role.AIMessageChunk ||
-          (message as any).type === 'ai'
+          isAIMessage(message)
+          // message.constructor.name === Role.AIMessageChunk ||
+          // (message as any).type === 'ai'
         ) {
           yield {
             content: message.content,

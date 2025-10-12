@@ -104,7 +104,6 @@ export type OpenAIAllowedModels = Extract<
   | 'gpt-4o'
   | 'gpt-4o-mini'
   | 'gpt-3.5-turbo'
-  | 'codex-mini-latest'
 >;
 
 export type DeepSeekAllowedModels = 'deepseek-chat' | 'deepseek-reasoner';

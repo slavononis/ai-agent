@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { GalleryVerticalEnd, Trash2 } from 'lucide-react';
+import { GalleryVerticalEnd, PlusIcon, Trash2 } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -81,19 +81,26 @@ export function ChatSidebar({
   return (
     <Sidebar variant="floating" {...props}>
       <SidebarHeader className="flex items-center flex-row gap-4 border-b">
-        <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-          <GalleryVerticalEnd className="size-4" />
+        <div className="flex justify-center w-full">
+          <Link to={RoutesPath.Home} replace>
+            <Button>
+              <PlusIcon />
+              New Chat
+            </Button>
+          </Link>
         </div>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
           {isLoading ? (
             <div className="flex flex-col gap-1">
-              <Skeleton className="h-10" style={{ animationDelay: '0.1s' }} />
-              <Skeleton className="h-10" style={{ animationDelay: '0.2s' }} />
-              <Skeleton className="h-10" style={{ animationDelay: '0.3s' }} />
-              <Skeleton className="h-10" style={{ animationDelay: '0.4s' }} />
-              <Skeleton className="h-10" style={{ animationDelay: '0.5s' }} />
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton
+                  key={i}
+                  className="h-10"
+                  style={{ animationDelay: `${i * 0.1}s` }}
+                />
+              ))}
             </div>
           ) : (
             <dl className="max-w-md divide-y divide-border text-foreground">

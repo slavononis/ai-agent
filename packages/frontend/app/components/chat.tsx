@@ -254,8 +254,11 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
           className="overflow-y-auto flex"
           onScroll={handleScroll}
         >
-          <div className="flex justify-center w-full">
-            <div className="flex-1 flex flex-col gap-2 p-2 max-w-5xl">
+          <>
+            <div
+              className="flex-1 flex flex-col gap-2 p-2"
+              style={{ width: '90%' }}
+            >
               {messages.map((msg, index) => {
                 const isAI = chatRoles.includes(msg.role);
                 const content = isAI
@@ -292,7 +295,7 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
 
               <div className="ref" ref={messagesEndRef} />
             </div>
-          </div>
+          </>
           <ChatScrollbar
             ref={scrollbarRef}
             containerRef={chatContainerRef}
