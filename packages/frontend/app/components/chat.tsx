@@ -1,5 +1,5 @@
 'use client';
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useMemo } from 'react';
 import { ChatInput } from './chat-input';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { continueProjectRequest, getProjectDetails } from '@/services/project';
@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { Role, type MessagesResponseDTO } from '@monorepo/shared';
 import { getChatQueryKey } from './chat.utils';
 import {
+  chatRoles,
   getFormattedMessage,
   getStructuralContent,
   setStructuralContent,
@@ -18,26 +19,29 @@ import { Mode } from '@/routes/home';
 import { continueChatStream, getChatDetails } from '@/services/conversation';
 import { Button } from './ui/button';
 import { ChevronDown, Loader } from 'lucide-react';
-import _ from 'lodash';
 import { Skeleton } from './ui/skeleton';
 import { RoutesPath } from '@/utils/routes.config';
 import { useLLMModel } from '@/store';
+import { ChatScrollbar, type ChatScrollbarRef } from './chat-scrollbar';
 
 type ChatProps = {
   mode: Mode;
 };
-const chatRoles = [Role.AIMessage, Role.AIMessageChunk];
 
 export const Chat: React.FC<ChatProps> = ({ mode }) => {
   const { id } = useParams();
   const queryClient = useQueryClient();
   const model = useLLMModel((state) => state.model);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const scrollbarRef = useRef<ChatScrollbarRef>(null);
+
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [isUserScrolling, setIsUserScrolling] = useState(false);
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
   const scrollTimeoutRef = useRef<NodeJS.Timeout>(null);
+
   const isChatMode = mode === Mode.Chat;
 
   const scrollToBottom = (behavior?: ScrollBehavior) => {
@@ -45,57 +49,72 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
   };
 
   const checkScrollPosition = () => {
-    const container = messagesContainerRef.current;
+    const container = chatContainerRef.current;
     if (!container) return;
 
     const { scrollTop, scrollHeight, clientHeight } = container;
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
 
-    // Show button when more than 150px from bottom
-    setShowScrollButton(distanceFromBottom > 150);
+    setShowScrollButton(distanceFromBottom > 700);
 
-    // Enable auto-scroll if user is at the bottom (within 50px)
-    const isAtBottom = distanceFromBottom <= 50;
-    setAutoScrollEnabled(isAtBottom);
+    setAutoScrollEnabled(distanceFromBottom <= 300);
   };
 
   const handleUserScroll = () => {
-    // Clear any existing timeout
-    if (scrollTimeoutRef.current) {
-      clearTimeout(scrollTimeoutRef.current);
-    }
-
-    // Set user scrolling state
+    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
     setIsUserScrolling(true);
-
-    // Set a timeout to reset user scrolling state after scroll ends
-    scrollTimeoutRef.current = setTimeout(() => {
-      setIsUserScrolling(false);
-    }, 200);
-
+    scrollTimeoutRef.current = setTimeout(() => setIsUserScrolling(false), 200);
     checkScrollPosition();
   };
 
+  // ✅ Unified scroll handler (combines both functionalities)
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    handleUserScroll();
+
+    const container = chatContainerRef.current;
+    if (!container) return;
+
+    const ids = messages.map((msg) => msg.id);
+    const containerScrollTop = container.scrollTop;
+    const containerHeight = container.clientHeight;
+
+    ids.forEach((id) => {
+      const el = container.querySelector(`#msg-${id}`) as HTMLDivElement | null;
+      if (!el) return;
+
+      const elTop = el.offsetTop;
+      const elHeight = el.offsetHeight;
+      const elBottom = elTop + elHeight;
+
+      const isInView =
+        elBottom > containerScrollTop &&
+        elTop < containerScrollTop + containerHeight;
+
+      if (isInView) {
+        scrollbarRef.current?.sync(id);
+      }
+    });
+  };
+
+  // ✅ Mutation (send message)
   const { mutate, isPending } = useMutation({
     mutationKey: getChatQueryKey(id!, mode),
     mutationFn: ({ message, files }: { message: string; files?: File[] }) => {
       const tempChatId = `temp-${Date.now().toString()}`;
       queryClient.setQueryData<MessagesResponseDTO>(
         getChatQueryKey(id!, mode),
-        (oldData) => {
-          return {
-            thread_id: id!,
-            messages: [
-              ...(oldData?.messages || []),
-              {
-                id: tempChatId,
-                thread_id: id!,
-                content: files ? setStructuralContent(message, files) : message,
-                role: Role.HumanMessage,
-              },
-            ],
-          };
-        }
+        (oldData) => ({
+          thread_id: id!,
+          messages: [
+            ...(oldData?.messages || []),
+            {
+              id: tempChatId,
+              thread_id: id!,
+              content: files ? setStructuralContent(message, files) : message,
+              role: Role.HumanMessage,
+            },
+          ],
+        })
       );
 
       return isChatMode
@@ -108,25 +127,16 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
               queryClient.setQueryData<MessagesResponseDTO>(
                 getChatQueryKey(id!, mode),
                 (oldData) => {
-                  // Get the last message (the one being streamed)
                   const lastMessage =
                     oldData?.messages?.[oldData.messages.length - 1];
-
-                  // If this chunk belongs to the last message, append content
                   if (lastMessage && lastMessage.id === chunk.id) {
-                    const updatedMessages = [...oldData.messages];
-                    updatedMessages[updatedMessages.length - 1] = {
+                    const updated = [...oldData.messages];
+                    updated[updated.length - 1] = {
                       ...lastMessage,
                       content: lastMessage.content + chunk.content!,
                     };
-
-                    return {
-                      ...oldData,
-                      messages: updatedMessages,
-                    };
+                    return { ...oldData, messages: updated };
                   }
-
-                  // Otherwise, create a new message
                   return {
                     ...oldData!,
                     messages: [
@@ -148,16 +158,12 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
               );
               queryClient.setQueryData<MessagesResponseDTO>(
                 getChatQueryKey(id!, mode),
-                (oldData) => {
-                  return {
-                    thread_id: id!,
-                    messages: [
-                      ...(oldData?.messages || []).filter(
-                        (msg) => !msg.id.startsWith('temp-')
-                      ),
-                    ],
-                  };
-                }
+                (oldData) => ({
+                  thread_id: id!,
+                  messages: (oldData?.messages || []).filter(
+                    (msg) => !msg.id.startsWith('temp-')
+                  ),
+                })
               );
             },
           })
@@ -165,71 +171,52 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
     },
     onSuccess: (data) => {
       if (!data) return;
-
       queryClient.setQueryData<MessagesResponseDTO>(
         getChatQueryKey(id!, mode),
-        (oldData) => {
-          return {
-            thread_id: id!,
-            messages: [...(oldData?.messages || []), data],
-          };
-        }
+        (oldData) => ({
+          thread_id: id!,
+          messages: [...(oldData?.messages || []), data],
+        })
       );
-
-      // Only auto-scroll if user hasn't manually scrolled up
-      if (autoScrollEnabled && !isUserScrolling) {
-        scrollToBottom();
-      }
+      if (autoScrollEnabled && !isUserScrolling) scrollToBottom();
     },
     onError: () => {
       displayToastError('Failed to send message. Please try again.');
       queryClient.setQueryData<MessagesResponseDTO>(
         getChatQueryKey(id!, mode),
-        (oldData) => {
-          return {
-            thread_id: id!,
-            messages: [
-              ...(oldData?.messages || []).filter(
-                (msg) => !msg.id.startsWith('temp-')
-              ),
-            ],
-          };
-        }
+        (oldData) => ({
+          thread_id: id!,
+          messages: (oldData?.messages || []).filter(
+            (msg) => !msg.id.startsWith('temp-')
+          ),
+        })
       );
     },
   });
 
+  // ✅ Query (load messages)
   const { data, isLoading, error } = useQuery({
     queryKey: getChatQueryKey(id!, mode),
     queryFn: () =>
       isChatMode
         ? getChatDetails({ projectId: id! })
         : getProjectDetails({ projectId: id! }),
-    enabled: (enabled) => !enabled.state.data?._initialThought && !!id,
+    enabled: !!id,
   });
 
-  // Scroll down whenever messages change, but only if auto-scroll is enabled
+  const messages = useMemo(() => data?.messages || [], [data?.messages]);
+
+  // ✅ Scroll on message change
   useEffect(() => {
-    if (data?.messages.length && autoScrollEnabled && !isUserScrolling) {
+    if (messages.length && autoScrollEnabled && !isUserScrolling) {
       scrollToBottom();
     }
-  }, [data?.messages, autoScrollEnabled, isUserScrolling]);
+  }, [messages, autoScrollEnabled, isUserScrolling]);
 
-  // Add scroll event listener to check scroll position
+  // ✅ Cleanup scroll timeout
   useEffect(() => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-
-    container.addEventListener('scroll', handleUserScroll);
-
-    // Initial check
-    checkScrollPosition();
-
     return () => {
-      container.removeEventListener('scroll', handleUserScroll);
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
     };
   }, []);
 
@@ -251,67 +238,76 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
         </div>
       ) : isLoading ? (
         <div className="flex flex-col gap-2 h-full w-full p-2">
-          <Skeleton
-            className="ml-auto h-12 w-full max-w-2xl bg-blue-100/10"
-            style={{ animationDelay: '0.1s' }}
-          />
-          <Skeleton
-            className="h-24 w-full max-w-2xl bg-blue-600/10"
-            style={{ animationDelay: '0.2s' }}
-          />
-          <Skeleton
-            className="ml-auto h-12 w-full max-w-2xl bg-blue-100/10"
-            style={{ animationDelay: '0.3s' }}
-          />
-          <Skeleton
-            className="h-24 w-full max-w-2xl bg-blue-600/10"
-            style={{ animationDelay: '0.4s' }}
-          />
-          <Skeleton
-            className="ml-auto h-12 w-full max-w-2xl bg-blue-100/10"
-            style={{ animationDelay: '0.5s' }}
-          />
-          <Skeleton
-            className="h-24 w-full max-w-2xl bg-blue-600/10"
-            style={{ animationDelay: '0.6s' }}
-          />
+          {Array.from({ length: 6 }, (_, i) => (
+            <Skeleton
+              key={i}
+              className={cn('h-24 w-full max-w-2xl bg-blue-600/10', {
+                'ml-auto h-12 bg-blue-100/10': i % 2 === 0,
+              })}
+              style={{ animationDelay: `${i * 0.1}s` }}
+            />
+          ))}
         </div>
       ) : (
         <div
-          ref={messagesContainerRef}
-          className="flex-1 overflow-y-auto flex flex-col gap-2 p-2"
+          ref={chatContainerRef}
+          className="overflow-y-auto flex"
+          onScroll={handleScroll}
         >
-          {data?.messages.map((msg, index, arr) => {
-            const isAI = chatRoles.includes(msg.role);
-            const content = isAI
-              ? isChatMode
-                ? msg.content
-                : getFormattedMessage(
-                    typeof msg.content === 'string' ? msg.content : ''
-                  ).description
-              : msg.content;
-            return (
-              <div
-                key={msg.id || index}
-                className={cn('p-4 rounded-lg animate-in', {
-                  'bg-blue-600/10': isAI,
-                  'bg-blue-100/10 ml-auto': msg.role === Role.HumanMessage,
-                })}
-              >
-                <MarkdownRenderer content={getStructuralContent(content)} />
-              </div>
-            );
-          })}
-          {chatThinking && (
-            <div className="flex gap-4 animate-pulse bg-muted p-4 rounded-lg self-start">
-              Thinking...{' '}
-              <Loader
-                className="animate-spin"
-                style={{ animationDuration: '2s' }}
-              />
+          <div className="flex justify-center w-full">
+            <div className="flex-1 flex flex-col gap-2 p-2 max-w-5xl">
+              {messages.map((msg, index) => {
+                const isAI = chatRoles.includes(msg.role);
+                const content = isAI
+                  ? isChatMode
+                    ? msg.content
+                    : getFormattedMessage(
+                        typeof msg.content === 'string' ? msg.content : ''
+                      ).description
+                  : msg.content;
+
+                return (
+                  <div
+                    id={`msg-${msg.id}`}
+                    key={msg.id || index}
+                    className={cn('p-4 rounded-lg animate-in chat-message', {
+                      'bg-blue-600/10': isAI,
+                      'bg-blue-100/10 ml-auto': msg.role === Role.HumanMessage,
+                    })}
+                  >
+                    <MarkdownRenderer content={getStructuralContent(content)} />
+                  </div>
+                );
+              })}
+
+              {chatThinking && (
+                <div className="flex gap-4 animate-pulse bg-muted p-4 rounded-lg self-start">
+                  Thinking...{' '}
+                  <Loader
+                    className="animate-spin"
+                    style={{ animationDuration: '2s' }}
+                  />
+                </div>
+              )}
+
+              <div className="ref" ref={messagesEndRef} />
             </div>
-          )}
-          <div ref={messagesEndRef} />
+          </div>
+          <ChatScrollbar
+            ref={scrollbarRef}
+            containerRef={chatContainerRef}
+            mode={mode}
+            onSelect={(msgId) => {
+              requestAnimationFrame(() => {
+                const el = chatContainerRef.current?.querySelector(
+                  `#msg-${msgId}`
+                );
+                if (el) {
+                  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+              });
+            }}
+          />
         </div>
       )}
 
@@ -321,11 +317,9 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
             size="icon"
             onClick={() => {
               scrollToBottom('smooth');
-              setTimeout(() => {
-                setAutoScrollEnabled(true); // Re-enable auto-scroll when user clicks the button
-              }, 1000);
+              setTimeout(() => setAutoScrollEnabled(true), 500);
             }}
-            className="absolute top-6 right-5.5 z-50 rounded-full animate-bounce"
+            className="absolute top-6 right-5 z-50 rounded-full animate-bounce"
             aria-label="Scroll to bottom"
           >
             <ChevronDown />

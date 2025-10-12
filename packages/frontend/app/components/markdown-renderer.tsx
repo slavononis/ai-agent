@@ -73,7 +73,7 @@ const CodeRenderer: React.FC<
     </code>
   ) : (
     <>
-      <span className="top-[-12px] z-40 flex items-center justify-between w-full sticky border border-color-border border-b-0 rounded-t-md !py-2 !px-3 pb-0 bg-muted/80 text-color-muted-foreground text-xs">
+      <span className="top-0 z-40 flex items-center justify-between w-full sticky border border-color-border border-b-0 rounded-t-md !py-2 !px-3 pb-0 bg-muted/80 text-color-muted-foreground text-xs">
         <span>{language}</span>
         <div className="flex gap-2">
           {isSVG && (

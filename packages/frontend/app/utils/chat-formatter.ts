@@ -1,4 +1,4 @@
-import type { StructuredContent } from '@monorepo/shared';
+import { Role, type StructuredContent } from '@monorepo/shared';
 
 export type ProjectModel = {
   name: string;
@@ -90,3 +90,5 @@ export const setStructuralContent = (
     }) ?? []),
   ];
 };
+
+export const chatRoles = [Role.AIMessage, Role.AIMessageChunk];
