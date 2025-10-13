@@ -52,6 +52,7 @@ interface StreamChunk {
   id?: string;
   chat_name?: string;
   error?: string;
+  searchInfo?: string;
 }
 
 /**
@@ -65,12 +66,14 @@ export async function startChatStream({
   onThreadId,
   onError,
   onComplete,
+  onSearchInfo,
 }: {
   model: OpenAIAllowedModels | AnthropicAllowedModels | DeepSeekAllowedModels;
   message: string;
   files?: File[];
   onChunk: (data: StreamChunk) => void;
   onThreadId?: (threadId: string) => void;
+  onSearchInfo?: (data: StreamChunk) => void;
   onError?: (error: string) => void;
   onComplete?: (data: StreamChunk) => void;
 }): Promise<MessageResponseDTO | null> {
@@ -112,6 +115,9 @@ export async function startChatStream({
                 }
                 break;
               case 'chunk':
+                if (data.role === Role.ToolMessage) {
+                  onSearchInfo?.(data);
+                }
                 if (data.content) {
                   onChunk(data);
                 }
@@ -153,14 +159,16 @@ export async function continueChatStream({
   onChunk,
   onError,
   onComplete,
+  onSearchInfo,
 }: {
   threadId: string;
   message: string;
   files?: File[];
   model: OpenAIAllowedModels | AnthropicAllowedModels | DeepSeekAllowedModels;
   onChunk: (data: StreamChunk) => void;
+  onSearchInfo?: (data: StreamChunk) => void;
   onError?: (error: string) => void;
-  onComplete?: () => void;
+  onComplete?: (data: StreamChunk) => void;
 }): Promise<MessageResponseDTO | null> {
   try {
     const formData = new FormData();
@@ -199,13 +207,16 @@ export async function continueChatStream({
 
             switch (data.type) {
               case 'chunk':
+                if (data.role === Role.ToolMessage) {
+                  onSearchInfo?.(data);
+                }
                 if (data.content) {
                   onChunk(data);
                 }
                 break;
               case 'done':
                 if (onComplete) {
-                  onComplete();
+                  onComplete(data);
                 }
                 break;
               case 'error':

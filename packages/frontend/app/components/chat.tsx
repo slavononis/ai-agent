@@ -23,6 +23,7 @@ import { Skeleton } from './ui/skeleton';
 import { RoutesPath } from '@/utils/routes.config';
 import { useLLMModel } from '@/store';
 import { ChatScrollbar, type ChatScrollbarRef } from './chat-scrollbar';
+import { Alert, AlertDescription } from './ui/alert';
 
 type ChatProps = {
   mode: Mode;
@@ -121,6 +122,28 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
             model,
             files,
             threadId: id!,
+            onComplete: (chunk) => {
+              queryClient.setQueryData<MessagesResponseDTO>(
+                getChatQueryKey(chunk.thread_id!, mode),
+                (oldData) => {
+                  return {
+                    ...oldData!,
+                    searchInfo: '',
+                  };
+                }
+              );
+            },
+            onSearchInfo: (chunk) => {
+              queryClient.setQueryData<MessagesResponseDTO>(
+                getChatQueryKey(chunk.thread_id!, mode),
+                (oldData) => {
+                  return {
+                    ...oldData!,
+                    searchInfo: chunk.searchInfo,
+                  };
+                }
+              );
+            },
             onChunk: (chunk) => {
               queryClient.setQueryData<MessagesResponseDTO>(
                 getChatQueryKey(id!, mode),
@@ -137,6 +160,7 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
                   }
                   return {
                     ...oldData!,
+                    searchInfo: '',
                     messages: [
                       ...(oldData?.messages || []),
                       {
@@ -198,7 +222,7 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
       isChatMode
         ? getChatDetails({ projectId: id! })
         : getProjectDetails({ projectId: id! }),
-    enabled: !!id,
+    enabled: (enabled) => !enabled.state.data?._initialThought && !!id,
   });
 
   const messages = useMemo(() => data?.messages || [], [data?.messages]);
@@ -277,6 +301,13 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
                   </div>
                 );
               })}
+              {data?.searchInfo && (
+                <Alert className="fade-in">
+                  <AlertDescription>
+                    <MarkdownRenderer content={data.searchInfo} />
+                  </AlertDescription>
+                </Alert>
+              )}
 
               {chatThinking && (
                 <div className="flex gap-4 animate-pulse bg-muted p-4 rounded-lg self-start">
@@ -309,7 +340,7 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
         </div>
       )}
 
-      <div className="sticky bottom-0 bg-background p-2">
+      <div className="sticky bottom-0 bg-background p-2 mt-auto">
         {showScrollButton && (
           <Button
             size="icon"

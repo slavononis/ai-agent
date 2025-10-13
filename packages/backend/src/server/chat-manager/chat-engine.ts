@@ -12,7 +12,11 @@ import {
   type MessageResponseDTO,
 } from '@monorepo/shared';
 import { v4 as uuidv4 } from 'uuid';
-import { isAIMessage, trimMessages } from '@langchain/core/messages';
+import {
+  isAIMessage,
+  isToolMessage,
+  trimMessages,
+} from '@langchain/core/messages';
 import { ToolNode } from '@langchain/langgraph/prebuilt';
 import { Collection, Document as MongoDocument } from 'mongodb';
 import { HumanMessage } from '@langchain/core/messages';
@@ -23,6 +27,7 @@ import { getFormattedMessage } from '../utils/message-format';
 import { chatPromptTemplate, projectPromptTemplate } from './prompt';
 import { createHumanMessage } from './human-message';
 import { ProviderManager } from './model-manager';
+import { TavilySearchResponse } from '@langchain/tavily';
 
 export class ChatEngine {
   protected model: ProviderManager['provider'];
@@ -243,6 +248,15 @@ export class ChatEngine {
             role: Role.AIMessageChunk,
             id: rawMessage.id,
           };
+        } else if (isToolMessage(rawMessage)) {
+          // NOTE Third party typing issue
+          const toolMessage = JSON.parse(
+            rawMessage.content as any
+          ) as TavilySearchResponse;
+          yield {
+            role: Role.ToolMessage,
+            searchInfo: this.getTavityToolInfo(toolMessage.results),
+          };
         }
       }
     } catch (error) {
@@ -384,5 +398,17 @@ export class ChatEngine {
   async deleteThread(thread_id: string) {
     await this.checkpointer?.deleteThread(thread_id);
     await this.chatMetadataCollection?.deleteOne({ thread_id });
+  }
+
+  getTavityToolInfo(results: TavilySearchResponse['results']) {
+    try {
+      return `##### Search Results\n\n${results
+        ?.map((r) => {
+          return `- [${r.title}](${r.url})`;
+        })
+        .join('\n')}`;
+    } catch (error) {
+      return '### Search Results\n\nNo results found';
+    }
   }
 }

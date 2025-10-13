@@ -62,7 +62,9 @@ export function ChatSidebar({
       if (threadId === id) {
         const firstChatId = updates?.chats?.[0]?.thread_id;
         if (firstChatId) {
-          navigate(RoutesPath.Chat.replace(':id', firstChatId));
+          navigate(RoutesPath.Chat.replace(':id', firstChatId), {
+            replace: true,
+          });
         } else {
           navigate(RoutesPath.Home, { replace: true });
         }

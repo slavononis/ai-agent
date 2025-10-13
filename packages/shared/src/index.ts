@@ -46,6 +46,7 @@ export interface MessageResponseDTO {
 
 export interface MessagesResponseDTO {
   _initialThought?: boolean;
+  searchInfo?: string;
   thread_id: string;
   chat_name?: string;
   messages: MessageResponseDTO[];

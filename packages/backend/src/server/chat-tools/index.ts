@@ -3,8 +3,7 @@
 import { TavilySearch } from '@langchain/tavily';
 
 export const tavilySearch = new TavilySearch({
-  maxResults: 2,
-  // ...
+  maxResults: 3,
 });
 
 // @ts-ignore

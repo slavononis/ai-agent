@@ -48,6 +48,17 @@ export default function Home() {
             model,
             message,
             files,
+            onSearchInfo: (chunk) => {
+              queryClient.setQueryData<MessagesResponseDTO>(
+                getChatQueryKey(chunk.thread_id!, mode),
+                (oldData) => {
+                  return {
+                    ...oldData!,
+                    searchInfo: chunk.searchInfo,
+                  };
+                }
+              );
+            },
             onChunk: (chunk) => {
               queryClient.setQueryData<MessagesResponseDTO>(
                 getChatQueryKey(chunk.thread_id!, mode),
@@ -82,6 +93,7 @@ export default function Home() {
 
                     return {
                       ...oldData,
+                      searchInfo: '',
                       messages: updatedMessages,
                       _initialThought: true,
                     };
@@ -141,6 +153,7 @@ export default function Home() {
                     ...(oldData! || {}),
                     chat_name: data.chat_name,
                     _initialThought: false,
+                    searchInfo: '',
                   };
                 }
               );
