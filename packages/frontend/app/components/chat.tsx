@@ -24,6 +24,7 @@ import { RoutesPath } from '@/utils/routes.config';
 import { useLLMModel } from '@/store';
 import { ChatScrollbar, type ChatScrollbarRef } from './chat-scrollbar';
 import { Alert, AlertDescription } from './ui/alert';
+import { MessageActions } from './message-actions';
 
 type ChatProps = {
   mode: Mode;
@@ -115,7 +116,7 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
           ],
         })
       );
-
+      scrollToBottom();
       return isChatMode
         ? continueChatStream({
             message,
@@ -275,10 +276,10 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
         >
           <>
             <div
-              className="flex-1 flex flex-col gap-2 p-2"
+              className="flex-1 flex flex-col gap-2 p-2 max-w-4xl mx-auto"
               style={{ width: '90%' }}
             >
-              {messages.map((msg, index) => {
+              {messages.map((msg, index, array) => {
                 const isAI = chatRoles.includes(msg.role);
                 const content = isAI
                   ? isChatMode
@@ -287,17 +288,28 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
                         typeof msg.content === 'string' ? msg.content : ''
                       ).description
                   : msg.content;
+                const isLastMessage = index === array.length - 1;
 
                 return (
-                  <div
-                    id={`msg-${msg.id}`}
-                    key={msg.id || index}
-                    className={cn('p-4 rounded-lg animate-in chat-message', {
-                      'bg-blue-600/10': isAI,
-                      'bg-blue-100/10 ml-auto': msg.role === Role.HumanMessage,
-                    })}
-                  >
-                    <MarkdownRenderer content={getStructuralContent(content)} />
+                  <div className="flex flex-col gap-2">
+                    <div
+                      id={`msg-${msg.id}`}
+                      key={msg.id || index}
+                      className={cn('p-4 rounded-lg animate-in chat-message', {
+                        'bg-blue-600/10': isAI,
+                        'bg-blue-100/10 ml-auto':
+                          msg.role === Role.HumanMessage,
+                      })}
+                    >
+                      <MarkdownRenderer
+                        content={getStructuralContent(content)}
+                      />
+                    </div>
+                    <MessageActions
+                      disabled={isLastMessage && isAI && chatThinking}
+                      isAi={isAI}
+                      text={getStructuralContent(content)}
+                    />
                   </div>
                 );
               })}
