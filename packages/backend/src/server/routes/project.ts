@@ -1,11 +1,11 @@
-import { Router } from 'express';
-import { ChatOpenAI } from '@langchain/openai';
-import { getFormattedMessage } from '../utils/message-format';
 import multer from 'multer';
-import { ALLOWED_MIME_TYPES, AppMimeType } from '../chat-manager/utils';
-import { ChatEngine } from '../chat-manager/chat-engine';
-import { generateChatName } from '../chat-manager/generate-chat-name';
+import { Router } from 'express';
+
 import { serializeError } from '../utils/error';
+import { ChatEngine } from '../chat-manager/chat-engine';
+import { getFormattedMessage } from '../utils/message-format';
+import { generateChatName } from '../chat-manager/generate-chat-name';
+import { ALLOWED_MIME_TYPES, AppMimeType } from '../chat-manager/utils';
 
 const baseEngineOptions: ConstructorParameters<typeof ChatEngine>[0] = {
   llmModel: 'gpt-4o-mini',
@@ -57,14 +57,15 @@ router.post('/chat/start', upload.array('file', 5), async (req, res) => {
 
     const responseWithChatName = {
       ...data,
+      reply,
       chat_name: chatName,
     };
 
-    res.json(responseWithChatName);
+    return res.json(responseWithChatName);
   } catch (err: any) {
     const safeError = serializeError(err);
     console.error('Error in /chat/start:', safeError);
-    res.status(500).json({ error: safeError.message });
+    return res.status(500).json({ error: safeError.message });
   }
 });
 
@@ -105,11 +106,11 @@ router.post('/chat/continue', upload.array('file', 5), async (req, res) => {
 
     await agent.updateChatMetadata(thread_id);
 
-    res.json(data);
+    return res.json({ ...data, reply });
   } catch (err: any) {
     const safeError = serializeError(err);
     console.error('Error in /chat/continue:', safeError);
-    res.status(500).json({ error: safeError.message });
+    return res.status(500).json({ error: safeError.message });
   }
 });
 
@@ -128,11 +129,11 @@ router.get('/chat/:thread_id', async (req, res) => {
       return res.status(404).json({ error: 'Chat not found' });
     }
 
-    res.json(threadDetails);
+    return res.json(threadDetails);
   } catch (err: any) {
     const safeError = serializeError(err);
     console.error('Error in /chat/:thread_id:', safeError);
-    res.status(500).json({ error: safeError.message });
+    return res.status(500).json({ error: safeError.message });
   }
 });
 

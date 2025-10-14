@@ -1,5 +1,5 @@
 import { Role, type StructuredContent } from '@monorepo/shared';
-
+import { jsonrepair } from 'jsonrepair';
 export type ProjectModel = {
   name: string;
   type: string;
@@ -19,7 +19,7 @@ const errorData: ProjectModel = {
 export const getFormattedMessage = (content: string): ProjectModel => {
   try {
     if (!content) return { name: '', type: '', description: '', files: [] };
-    const obj: ProjectModel = JSON.parse(content);
+    const obj: ProjectModel = JSON.parse(jsonrepair(content));
     if (
       typeof obj.name === 'string' &&
       typeof obj.type === 'string' &&

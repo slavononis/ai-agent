@@ -33,7 +33,7 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
       className={cn('flex gap-2 mb-2 justify-end', { 'justify-start': isAi })}
     >
       <Tooltip>
-        <TooltipTrigger>
+        <TooltipTrigger asChild>
           <Button variant="ghost" onClick={handleCopy} disabled={disabled}>
             {copied ? (
               <Check className="size-5" />

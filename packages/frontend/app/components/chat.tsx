@@ -25,6 +25,7 @@ import { useLLMModel } from '@/store';
 import { ChatScrollbar, type ChatScrollbarRef } from './chat-scrollbar';
 import { Alert, AlertDescription } from './ui/alert';
 import { MessageActions } from './message-actions';
+import { showNotification } from '@/helpers/browser-notification';
 
 type ChatProps = {
   mode: Mode;
@@ -104,6 +105,7 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
       queryClient.setQueryData<MessagesResponseDTO>(
         getChatQueryKey(id!, mode),
         (oldData) => ({
+          ...oldData,
           thread_id: id!,
           messages: [
             ...(oldData?.messages || []),
@@ -124,6 +126,7 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
             files,
             threadId: id!,
             onComplete: (chunk) => {
+              showNotification('Answer From chat is ready.');
               queryClient.setQueryData<MessagesResponseDTO>(
                 getChatQueryKey(chunk.thread_id!, mode),
                 (oldData) => {
@@ -194,6 +197,8 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
     },
     onSuccess: (data) => {
       if (!data) return;
+      showNotification('Answer From chat is ready.');
+
       queryClient.setQueryData<MessagesResponseDTO>(
         getChatQueryKey(id!, mode),
         (oldData) => ({
@@ -291,10 +296,9 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
                 const isLastMessage = index === array.length - 1;
 
                 return (
-                  <div className="flex flex-col gap-2">
+                  <div key={msg.id || index} className="flex flex-col gap-2">
                     <div
                       id={`msg-${msg.id}`}
-                      key={msg.id || index}
                       className={cn('p-4 rounded-lg animate-in chat-message', {
                         'bg-blue-600/10': isAI,
                         'bg-blue-100/10 ml-auto':

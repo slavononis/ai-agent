@@ -19,6 +19,7 @@ import { useState } from 'react';
 import { startChatStream, type ChatListItem } from '@/services/conversation';
 import { setStructuralContent } from '@/utils/chat-formatter';
 import { useLLMModel } from '@/store';
+import { showNotification } from '@/helpers/browser-notification';
 export function meta({}: Route.MetaArgs) {
   return [
     { title: 'New React Router App' },
@@ -146,6 +147,7 @@ export default function Home() {
               );
             },
             onComplete: (data) => {
+              showNotification('Answer From chat is ready.');
               queryClient.setQueryData<MessagesResponseDTO>(
                 getChatQueryKey(data.thread_id!, mode),
                 (oldData) => {
@@ -180,6 +182,7 @@ export default function Home() {
     },
     onSuccess: (data, vars) => {
       if (!data) return;
+      showNotification('Answer From chat is ready.');
       const tempChatId = `temp-${Date.now().toString()}`;
       queryClient.setQueryData<MessagesResponseDTO>(
         getChatQueryKey(data.thread_id!, mode),

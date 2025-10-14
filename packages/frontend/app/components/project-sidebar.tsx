@@ -12,7 +12,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getChatQueryKey } from './chat.utils';
 import { getProjectDetails } from '@/services/project';
 import { useParams } from 'react-router';
-import { getFormattedMessage } from '@/utils/chat-formatter';
+import { chatRoles, getFormattedMessage } from '@/utils/chat-formatter';
 import { Role } from '@monorepo/shared';
 import { Mode } from '@/routes/home';
 
@@ -28,8 +28,12 @@ export function ProjectSidebar({
   const lastAssistantMessage = data?.messages
     ?.slice()
     .reverse()
-    .find((msg) => msg.role === Role.AIMessage);
-  const project = getFormattedMessage(lastAssistantMessage?.content || '');
+    .find((msg) => chatRoles.includes(msg.role));
+  const project = getFormattedMessage(
+    Array.isArray(lastAssistantMessage?.content)
+      ? ''
+      : lastAssistantMessage?.content || ''
+  );
 
   return (
     <Sidebar variant="floating" {...props}>

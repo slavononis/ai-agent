@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getChatQueryKey } from './chat.utils';
 import { getProjectDetails } from '@/services/project';
 import { Role } from '@monorepo/shared';
-import { getFormattedMessage } from '@/utils/chat-formatter';
+import { chatRoles, getFormattedMessage } from '@/utils/chat-formatter';
 import {
   ResizableHandle,
   ResizablePanel,
@@ -40,9 +40,14 @@ export const ProjectContent = () => {
   const lastAssistantMessage = data?.messages
     ?.slice()
     .reverse()
-    .find((msg) => msg.role === Role.AIMessage);
+    .find((msg) => chatRoles.includes(msg.role));
 
-  const project = getFormattedMessage(lastAssistantMessage?.content || '');
+  const project = getFormattedMessage(
+    Array.isArray(lastAssistantMessage?.content)
+      ? ''
+      : lastAssistantMessage?.content || ''
+  );
+
   const filePaths = (project.files || [])
     .map((file) => file.path)
     .filter((v) => v.toLowerCase().includes(searchQuery.toLowerCase()));
