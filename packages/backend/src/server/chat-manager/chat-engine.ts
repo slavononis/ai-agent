@@ -17,9 +17,11 @@ import {
   isToolMessage,
   trimMessages,
 } from '@langchain/core/messages';
-import { ToolNode } from '@langchain/langgraph/prebuilt';
-import { Collection, Document as MongoDocument } from 'mongodb';
+import _ from 'lodash';
 import { HumanMessage } from '@langchain/core/messages';
+import { ToolNode } from '@langchain/langgraph/prebuilt';
+import { TavilySearchResponse } from '@langchain/tavily';
+import { Collection, Document as MongoDocument } from 'mongodb';
 import { MongoDBSaver } from '@langchain/langgraph-checkpoint-mongodb';
 
 import { initializeMongoDB } from '../lib/mongoDB';
@@ -27,7 +29,6 @@ import { getFormattedMessage } from '../utils/message-format';
 import { chatPromptTemplate, projectPromptTemplate } from './prompt';
 import { createHumanMessage } from './human-message';
 import { ProviderManager } from './model-manager';
-import { TavilySearchResponse } from '@langchain/tavily';
 
 export class ChatEngine {
   protected model: ProviderManager['provider'];
@@ -68,7 +69,7 @@ export class ChatEngine {
 
   get trimmer() {
     return trimMessages({
-      maxTokens: 10000,
+      maxTokens: 20000,
       strategy: 'last',
       tokenCounter: this.model,
       includeSystem: true,
@@ -84,10 +85,15 @@ export class ChatEngine {
   async callModel(state: typeof MessagesAnnotation.State) {
     try {
       const trimmedMessages = await this.trimmer.invoke(state.messages);
+
       const currentPrompt =
         this.mode === 'user-chat' ? chatPromptTemplate : projectPromptTemplate;
+      const messages =
+        this.mode === 'user-chat'
+          ? trimmedMessages
+          : _.takeRight(trimmedMessages, 2);
       const prompt = await currentPrompt.invoke({
-        messages: trimmedMessages,
+        messages,
       });
 
       const response = await this.llmWithTools.invoke(prompt);

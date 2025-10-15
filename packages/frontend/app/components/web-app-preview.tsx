@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   Sandpack,
   SandpackLayout,
@@ -58,7 +57,15 @@ export default function WebAppPreView({
       )
     : {};
   return (
-    <SandpackProvider template="vite-react" files={preparedFiles} theme="auto">
+    <SandpackProvider
+      template="vite-react"
+      files={preparedFiles}
+      options={{
+        externalResources: [], // optional
+      }}
+      customSetup={{ environment: 'create-react-app-typescript', dependencies }}
+      theme="auto"
+    >
       <SandpackLayout style={{ border: 'none', borderRadius: 0 }}>
         <SandpackPreview
           style={{
@@ -68,27 +75,5 @@ export default function WebAppPreView({
         />
       </SandpackLayout>
     </SandpackProvider>
-  );
-
-  return (
-    <Sandpack
-      template="vite-react"
-      files={preparedFiles}
-      // customSetup={{ dependencies }}
-      // customSetup={{
-      //   dependencies: {
-      //     // '@codesandbox/sandpack-react': '^2.20.0',
-      //   },
-      // }}
-      options={{
-        showConsole: true,
-        showNavigator: true,
-        showLineNumbers: true,
-        showTabs: true,
-        editorHeight: 'calc(100vh - 58px)',
-        externalResources: ['https://cdn.tailwindcss.com'],
-      }}
-      theme="auto"
-    />
   );
 }

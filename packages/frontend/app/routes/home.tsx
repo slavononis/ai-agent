@@ -233,6 +233,7 @@ export default function Home() {
       displayToastError('Failed to start chat. Please try again.');
     },
   });
+
   return (
     <div className="grid place-items-center h-screen flex-col p-4">
       <div className="w-full max-w-2xl flex flex-col items-end gap-4">
