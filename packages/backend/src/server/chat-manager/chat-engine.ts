@@ -91,7 +91,7 @@ export class ChatEngine {
       const messages =
         this.mode === 'user-chat'
           ? trimmedMessages
-          : _.takeRight(trimmedMessages, 2);
+          : _.takeRight(trimmedMessages, 4);
       const prompt = await currentPrompt.invoke({
         messages,
       });

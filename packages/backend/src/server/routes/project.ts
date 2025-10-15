@@ -137,4 +137,69 @@ router.get('/chat/:thread_id', async (req, res) => {
   }
 });
 
+// Get all chats list
+router.get('/chats', async (_req, res) => {
+  try {
+    const chatEngine = new ChatEngine(baseEngineOptions);
+    const agent = await chatEngine.initialize();
+    const chats = await agent.getThreadList();
+
+    return res.json({ chats });
+  } catch (err: any) {
+    const safeError = serializeError(err);
+    console.error('Error in /chats:', safeError);
+    return res.status(500).json({ error: safeError.message });
+  }
+});
+
+// Update chat name
+router.patch('/chat/:thread_id/name', async (req, res) => {
+  try {
+    const { thread_id } = req.params;
+    const { chat_name } = req.body;
+
+    if (!thread_id || !chat_name || typeof chat_name !== 'string') {
+      return res
+        .status(400)
+        .json({ error: 'thread_id and chat_name required' });
+    }
+
+    if (chat_name.length > 100) {
+      return res.status(400).json({ error: 'Chat name too long' });
+    }
+
+    const chatEngine = new ChatEngine(baseEngineOptions);
+    const agent = await chatEngine.initialize();
+
+    await agent.updateChatMetadata(thread_id, chat_name, false);
+
+    return res.json({ success: true, thread_id, chat_name });
+  } catch (err: any) {
+    const safeError = serializeError(err);
+    console.error('Error updating chat name:', safeError);
+    return res.status(500).json({ error: safeError.message });
+  }
+});
+
+// Delete chat
+router.delete('/chat/:thread_id', async (req, res) => {
+  try {
+    const { thread_id } = req.params;
+    if (!thread_id) {
+      return res.status(400).json({ error: 'thread_id required' });
+    }
+
+    const chatEngine = new ChatEngine(baseEngineOptions);
+    const agent = await chatEngine.initialize();
+
+    await agent.deleteThread(thread_id);
+
+    return res.json({ success: true, deleted: thread_id });
+  } catch (err: any) {
+    const safeError = serializeError(err);
+    console.error('Error in DELETE /chat/:thread_id:', safeError);
+    return res.status(500).json({ error: safeError.message });
+  }
+});
+
 export default router;

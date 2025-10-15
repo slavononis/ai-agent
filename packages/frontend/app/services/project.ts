@@ -6,6 +6,16 @@ import {
   type MessagesResponseDTO,
   type OpenAIAllowedModels,
 } from '@monorepo/shared';
+import type { ChatListItem } from './conversation';
+
+export const getProjectsListRequest = async () => {
+  return api
+    .get<{ chats: ChatListItem[] }>('/api/project/chats')
+    .then((res) => res.data)
+    .catch((err) => {
+      throw err;
+    });
+};
 
 export const getProjectDetails = async ({
   projectId,
@@ -67,6 +77,17 @@ export const continueProjectRequest = async ({
   }
   return api
     .post<MessageResponseDTO>('/api/project/chat/continue', formData)
+    .then((res) => res.data)
+    .catch((err) => {
+      throw err;
+    });
+};
+
+export const deleteProjectRequest = async (thread_id: string) => {
+  return api
+    .delete<{ success: boolean; deleted: string }>(
+      `/api/project/chat/${thread_id}`
+    )
     .then((res) => res.data)
     .catch((err) => {
       throw err;

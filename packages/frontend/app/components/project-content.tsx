@@ -1,5 +1,5 @@
 import { TreeView } from './tree-view';
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { getChatQueryKey } from './chat.utils';
 import { getProjectDetails } from '@/services/project';
@@ -15,15 +15,17 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from '@/components/ui/sidebar';
+
 import { useEffect, useState } from 'react';
 import { MarkdownCode } from './markdown-code';
 import WebAppPreView from './web-app-preview';
 import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
-import { Code, Search } from 'lucide-react';
+import { Code, PlusIcon, Search } from 'lucide-react';
 import { FileBtn } from './file-btn';
 import { Input } from './ui/input';
 import { Mode } from '@/routes/home';
+import { RoutesPath } from '@/utils/routes.config';
 
 export const ProjectContent = () => {
   const { id } = useParams<{ id: string }>();
@@ -83,6 +85,12 @@ export const ProjectContent = () => {
           <Code />
           <span className="sr-only">Toggle Code</span>
         </Button>
+        <Link to={RoutesPath.Home} replace className="ml-auto">
+          <Button size={'sm'}>
+            <PlusIcon />
+            New Project
+          </Button>
+        </Link>
       </header>
 
       {!isLoading && (

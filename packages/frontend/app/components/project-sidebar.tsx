@@ -1,5 +1,4 @@
 import * as React from 'react';
-import { GalleryVerticalEnd } from 'lucide-react';
 
 import {
   Sidebar,
@@ -11,10 +10,10 @@ import { Chat } from './chat';
 import { useQuery } from '@tanstack/react-query';
 import { getChatQueryKey } from './chat.utils';
 import { getProjectDetails } from '@/services/project';
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 import { chatRoles, getFormattedMessage } from '@/utils/chat-formatter';
-import { Role } from '@monorepo/shared';
 import { Mode } from '@/routes/home';
+import { ProjectList } from './project-list';
 
 export function ProjectSidebar({
   ...props
@@ -38,8 +37,8 @@ export function ProjectSidebar({
   return (
     <Sidebar variant="floating" {...props}>
       <SidebarHeader className="flex items-center flex-row gap-4 border-b">
-        <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-          <GalleryVerticalEnd className="size-4" />
+        <div className="flex items-center justify-center">
+          <ProjectList />
         </div>
         <div className="flex flex-col gap-0.5 leading-none">
           <span hidden={!project.name} className="font-semibold">
