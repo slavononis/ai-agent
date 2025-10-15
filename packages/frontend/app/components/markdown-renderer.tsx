@@ -212,17 +212,32 @@ const _MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
           thead: ({ children }) => (
             <thead className="text-foreground">{children}</thead>
           ),
-          th: ({ children }) => (
-            <th className="text-left font-bold px-3.5 py-2 bg-color-card border-t border-r border-b first:border-l border-color-border first:rounded-tl-lg last:rounded-tr-lg">
+          th: ({ children, node, ...props }) => (
+            <th
+              {...props}
+              className="font-bold px-3.5 py-2 bg-color-card border-t border-r border-b first:border-l border-color-border first:rounded-tl-lg last:rounded-tr-lg"
+            >
               {children}
             </th>
           ),
-          td: ({ children }) => (
-            <td className="text-left px-3.5 py-2 text-muted-foreground border-r border-b first:border-l border-color-border">
+          td: ({ children, node, ...props }) => (
+            <td
+              {...props}
+              className="px-3.5 py-2 text-muted-foreground border-r border-b first:border-l border-color-border"
+            >
               {children}
             </td>
           ),
-
+          svg: ({ children, node, ...props }) => (
+            <svg
+              className="mb-3.5 last:mb-0 text-base/[21px]"
+              {...props}
+              fill="currentColor"
+              width={'100%'}
+            >
+              {children}
+            </svg>
+          ),
           a: ({ node, children, ...props }) => (
             <a
               {...props}
