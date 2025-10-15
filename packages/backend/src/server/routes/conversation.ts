@@ -51,7 +51,6 @@ router.post('/chat/start', upload.array('file', 5), async (req, res) => {
 
     const userMessage = await agent.createHumanMessage(message, files);
     const thread_id = agent.createUUID();
-
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -96,7 +95,7 @@ router.post('/chat/start', upload.array('file', 5), async (req, res) => {
       const safeError = serializeError(err);
       console.error('Stream error in /chat/start:', safeError);
       res.write(
-        `data: ${JSON.stringify({ type: 'error', error: safeError.message })}\n\n`
+        `data: ${JSON.stringify({ type: 'error', error: safeError.message, thread_id })}\n\n`
       );
       return res.end();
     }
@@ -109,8 +108,9 @@ router.post('/chat/start', upload.array('file', 5), async (req, res) => {
 
 // Continue existing chat
 router.post('/chat/continue', upload.array('file', 5), async (req, res) => {
+  const { thread_id, message, model } = req.body;
+
   try {
-    const { thread_id, message, model } = req.body;
     const filesObj = req.files;
     const files = Array.isArray(filesObj) ? filesObj : undefined;
 
@@ -173,7 +173,7 @@ router.post('/chat/continue', upload.array('file', 5), async (req, res) => {
       const safeError = serializeError(err);
       console.error('Stream error in /chat/continue:', safeError);
       res.write(
-        `data: ${JSON.stringify({ type: 'error', error: safeError.message })}\n\n`
+        `data: ${JSON.stringify({ type: 'error', error: safeError.message, thread_id })}\n\n`
       );
       return res.end();
     }

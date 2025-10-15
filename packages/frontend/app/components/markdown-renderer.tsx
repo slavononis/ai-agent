@@ -67,13 +67,13 @@ const CodeRenderer: React.FC<
   return !language ? (
     <code
       {...props}
-      className="border border-color-border bg-primary/10 text-color-accent py-0.5 px-1.5 rounded-md text-xs font-mono whitespace-break-spaces"
+      className="border border-color-border bg-primary/10 text-accent py-0.5 px-1.5 rounded-md text-xs font-mono whitespace-break-spaces"
     >
       {children}
     </code>
   ) : (
     <>
-      <span className="top-0 z-40 flex items-center justify-between w-full sticky border border-color-border border-b-0 rounded-t-md !py-2 !px-3 pb-0 bg-muted/80 text-color-muted-foreground text-xs">
+      <span className="top-0 z-40 flex items-center justify-between w-full sticky border border-color-border border-b-0 rounded-t-md !py-2 !px-3 pb-0 bg-muted/80 text-muted-foreground text-xs">
         <span>{language}</span>
         <div className="flex gap-2">
           {isSVG && (
@@ -109,7 +109,7 @@ const CodeRenderer: React.FC<
       </span>
       {viewSvg ? (
         <span
-          className="block w-full relative border border-color-border border-t-0 rounded-b-md !p-3.5 !bg-background/80 !text-sm !pt-2 mb-2"
+          className="block w-full relative border border-color-border border-t-0 rounded-b-md !p-3.5 !bg-background/80 !text-base !pt-2 mb-2"
           dangerouslySetInnerHTML={{
             __html: getTextFromReactNode(children),
           }}
@@ -118,7 +118,7 @@ const CodeRenderer: React.FC<
         <code
           className={cn(
             className,
-            'relative border border-color-border border-t-0 rounded-b-md !p-3.5 !bg-background/80 !text-sm !pt-2 mb-2'
+            'relative border border-color-border border-t-0 rounded-b-md !p-3.5 !bg-primary/10 !text-sm !pt-2 mb-2'
           )}
           {...props}
         >
@@ -138,63 +138,63 @@ const _MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
         rehypePlugins={[rehypeHighlight, rehypeKatex]}
         components={{
           h1: ({ children }) => (
-            <h1 className="text-4xl font-bold mb-2 last:mb-0 text-color-foreground">
+            <h1 className="text-4xl font-bold mb-2 last:mb-0 text-foreground">
               {children}
             </h1>
           ),
           h2: ({ children }) => (
-            <h2 className="text-3xl mb-2 font-bold last:mb-0 text-color-foreground">
+            <h2 className="text-3xl mb-2 font-bold last:mb-0 text-foreground">
               {children}
             </h2>
           ),
           h3: ({ children }) => (
-            <h3 className="text-2xl mb-2 font-bold last:mb-0 text-color-foreground">
+            <h3 className="text-2xl mb-2 font-bold last:mb-0 text-foreground">
               {children}
             </h3>
           ),
           h4: ({ children }) => (
-            <h4 className="text-xl mb-2 font-bold last:mb-0 text-color-foreground ">
+            <h4 className="text-xl mb-2 font-bold last:mb-0 text-foreground ">
               {children}
             </h4>
           ),
           h5: ({ children }) => (
-            <h5 className="text-lg mb-2 font-bold last:mb-0 text-color-foreground ">
+            <h5 className="text-lg mb-2 font-bold last:mb-0 text-foreground ">
               {children}
             </h5>
           ),
           h6: ({ children }) => (
-            <h6 className="text-base mb-2 font-bold last:mb-0 text-color-foreground ">
+            <h6 className="text-base mb-2 font-bold last:mb-0 text-foreground ">
               {children}
             </h6>
           ),
 
           p: ({ children }) => (
-            <p className="mb-3.5 last:mb-0 text-color-muted-foreground text-sm/[22px] font-body break-words">
+            <p className="mb-3.5 last:mb-0 text-muted-foreground text-base/[22px] font-body break-words">
               {children}
             </p>
           ),
           ul: ({ children }) => (
-            <ul className="list-disc list-inside mb-3.5 last:mb-0 text-color-muted-foreground text-sm/[21px]">
+            <ul className="list-disc list-inside mb-3.5 last:mb-0 text-muted-foreground text-base/[21px]">
               {children}
             </ul>
           ),
           ol: ({ children }) => (
-            <ol className="list-decimal list-inside mb-3.5 last:mb-0 text-color-muted-foreground text-sm/[21px] font-body">
+            <ol className="list-decimal list-inside mb-3.5 last:mb-0 text-muted-foreground text-base/[21px] font-body">
               {children}
             </ol>
           ),
           li: ({ children }) => <li className="leading-relaxed">{children}</li>,
           em: ({ children }) => (
-            <em className="text-color-foreground font-body">{children}</em>
+            <em className="text-foreground font-body">{children}</em>
           ),
           strong: ({ children }) => (
-            <strong className="font-semibold text-color-foreground font-body">
+            <strong className="font-semibold text-foreground font-body">
               {children}
             </strong>
           ),
           hr: () => <hr className="my-3.5 border-color-border" />,
           blockquote: ({ children }) => (
-            <blockquote className="border-l-2 border-color-border pl-3.5 mb-3.5 last:mb-0 text-color-muted-foreground text-sm/[21px] font-body rounded-l-md bg-color-muted/20">
+            <blockquote className="border-l-2 border-color-border pl-3.5 mb-3.5 last:mb-0 text-muted-foreground text-base/[21px] font-body rounded-l-md bg-color-muted/20">
               {children}
             </blockquote>
           ),
@@ -202,7 +202,7 @@ const _MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
           table: ({ children }) => (
             <div className="overflow-x-auto mb-3.5 last:mb-0">
               <table
-                className="w-full mb-3.5 last:mb-0 text-sm/[21px] border-separate border-spacing-0 [&>tbody>tr:last-child>td:first-child]:rounded-bl-lg
+                className="w-full mb-3.5 last:mb-0 text-base/[21px] border-separate border-spacing-0 [&>tbody>tr:last-child>td:first-child]:rounded-bl-lg
                     [&>tbody>tr:last-child>td:last-child]:rounded-br-lg "
               >
                 {children}
@@ -210,7 +210,7 @@ const _MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
             </div>
           ),
           thead: ({ children }) => (
-            <thead className="text-color-foreground">{children}</thead>
+            <thead className="text-foreground">{children}</thead>
           ),
           th: ({ children }) => (
             <th className="text-left font-bold px-3.5 py-2 bg-color-card border-t border-r border-b first:border-l border-color-border first:rounded-tl-lg last:rounded-tr-lg">
@@ -218,7 +218,7 @@ const _MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
             </th>
           ),
           td: ({ children }) => (
-            <td className="text-left px-3.5 py-2 text-color-muted-foreground border-r border-b first:border-l border-color-border">
+            <td className="text-left px-3.5 py-2 text-muted-foreground border-r border-b first:border-l border-color-border">
               {children}
             </td>
           ),
@@ -226,7 +226,7 @@ const _MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
           a: ({ node, children, ...props }) => (
             <a
               {...props}
-              className="text-color-accent hover:text-color-accent/90 visited:text-color-accent/50 underline underline-offset-2 transition-colors font-body"
+              className="text-accent hover:text-accent/90 visited:text-accent/50 underline underline-offset-2 transition-colors font-body"
               target="_blank"
               rel="noreferrer"
             >

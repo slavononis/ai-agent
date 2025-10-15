@@ -180,7 +180,7 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
             },
             onError: (error) => {
               displayToastError(
-                'Failed to send message. Please try again. Details: ' + error
+                error.error || 'Failed to send message. Please try again.'
               );
               queryClient.setQueryData<MessagesResponseDTO>(
                 getChatQueryKey(id!, mode),
@@ -300,7 +300,7 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
                     <div
                       id={`msg-${msg.id}`}
                       className={cn('p-4 rounded-lg animate-in chat-message', {
-                        'bg-blue-600/10': isAI,
+                        'border-l-2 border-b-2': isAI,
                         'bg-blue-100/10 ml-auto':
                           msg.role === Role.HumanMessage,
                       })}

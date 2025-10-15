@@ -30,3 +30,7 @@ export const tavilySearch = new TavilySearch({
 //     return res;
 //   },
 // });
+import { tool } from '@langchain/core/tools';
+export const webSearchTool = tool(() => {}, {
+  name: 'web_search_preview',
+});

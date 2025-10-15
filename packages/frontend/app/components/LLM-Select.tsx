@@ -26,6 +26,7 @@ const models: (
   'gpt-4o',
   'gpt-4o-mini',
   'gpt-3.5-turbo',
+  'claude-sonnet-4-5-20250929',
   'claude-sonnet-4-20250514',
   'claude-3-7-sonnet-20250219',
   'claude-opus-4-20250514',

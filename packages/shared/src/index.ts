@@ -112,6 +112,7 @@ export type DeepSeekAllowedModels = 'deepseek-chat' | 'deepseek-reasoner';
 export type AnthropicAllowedModels =
   | Extract<
       AnthropicMessagesModelId,
+      | 'claude-sonnet-4-5-20250929'
       | 'claude-sonnet-4-20250514'
       | 'claude-3-7-sonnet-20250219'
       | 'claude-opus-4-20250514'

@@ -39,7 +39,7 @@ export default function Home() {
   const model = useLLMModel((state) => state.model);
 
   const isChatMode = mode === Mode.Chat;
-  const { mutate, isPending } = useMutation({
+  const { mutate, isPending, reset } = useMutation({
     mutationKey: getChatQueryKey('new-thread', mode),
     mutationFn: ({ message, files }: { message: string; files?: File[] }) => {
       const tempChatId = `temp-${Date.now().toString()}`;
@@ -142,8 +142,19 @@ export default function Home() {
               navigate(RoutesPath.Chat.replace(':id', threadId));
             },
             onError: (error) => {
+              reset();
+              queryClient.setQueryData<MessagesResponseDTO>(
+                getChatQueryKey(error.thread_id!, mode),
+                (oldData) => {
+                  return {
+                    ...(oldData! || {}),
+
+                    _initialThought: false,
+                  };
+                }
+              );
               displayToastError(
-                'Failed to start chat. Please try again. Details: ' + error
+                error.error || 'Failed to send message. Please try again.'
               );
             },
             onComplete: (data) => {

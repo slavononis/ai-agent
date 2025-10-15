@@ -46,6 +46,11 @@ const modelsNOTAllowStreaming: (
   | DeepSeekAllowedModels
   | OpenAIAllowedModels
 )[] = ['gpt-5', 'gpt-5-mini'];
+const modelsRequireTopP: (
+  | AnthropicAllowedModels
+  | DeepSeekAllowedModels
+  | OpenAIAllowedModels
+)[] = ['claude-sonnet-4-5-20250929'];
 
 export class ProviderManager {
   model: OpenAIAllowedModels | AnthropicAllowedModels | DeepSeekAllowedModels;
@@ -65,6 +70,13 @@ export class ProviderManager {
     return new Model({
       modelName: this.model,
       streaming: this.streaming,
+      ...(modelsRequireTopP.includes(this.model)
+        ? {
+            topP: 0.7,
+            // NOTE third partly typing issue
+            temperature: null as any,
+          }
+        : {}),
     });
   }
 }

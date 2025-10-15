@@ -74,7 +74,7 @@ export async function startChatStream({
   onChunk: (data: StreamChunk) => void;
   onThreadId?: (threadId: string) => void;
   onSearchInfo?: (data: StreamChunk) => void;
-  onError?: (error: string) => void;
+  onError?: (error: StreamChunk) => void;
   onComplete?: (data: StreamChunk) => void;
 }): Promise<MessageResponseDTO | null> {
   try {
@@ -129,7 +129,7 @@ export async function startChatStream({
                 break;
               case 'error':
                 if (onError) {
-                  onError(data.error || 'Unknown error');
+                  onError(data);
                 }
                 break;
             }
@@ -167,7 +167,7 @@ export async function continueChatStream({
   model: OpenAIAllowedModels | AnthropicAllowedModels | DeepSeekAllowedModels;
   onChunk: (data: StreamChunk) => void;
   onSearchInfo?: (data: StreamChunk) => void;
-  onError?: (error: string) => void;
+  onError?: (error: StreamChunk) => void;
   onComplete?: (data: StreamChunk) => void;
 }): Promise<MessageResponseDTO | null> {
   try {
@@ -221,7 +221,7 @@ export async function continueChatStream({
                 break;
               case 'error':
                 if (onError) {
-                  onError(data.error || 'Unknown error');
+                  onError(data);
                 }
                 break;
             }
