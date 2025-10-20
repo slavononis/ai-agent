@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Textarea } from './ui/textarea';
 import { Button } from './ui/button';
 import {
@@ -50,7 +50,7 @@ const contentTypes = [
   'text/plain',
   'application/json',
 ] as const;
-export const ChatInput: React.FC<ChatInputProps> = ({
+export const _ChatInput: React.FC<ChatInputProps> = ({
   onSend,
   loading,
   clearOnSend = true,
@@ -284,3 +284,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     </Card>
   );
 };
+
+export const ChatInput = memo(
+  _ChatInput,
+  (prevProps, nextProps) => prevProps.loading === nextProps.loading
+);

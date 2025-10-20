@@ -29,6 +29,7 @@ import { getFormattedMessage } from '../utils/message-format';
 import { chatPromptTemplate, projectPromptTemplate } from './prompt';
 import { createHumanMessage } from './human-message';
 import { ProviderManager } from './model-manager';
+import { initMcps } from '../lib/mcp-servers';
 
 export class ChatEngine {
   protected model: ProviderManager['provider'];
@@ -54,7 +55,6 @@ export class ChatEngine {
     this.checkpointer = null;
     this.chatMetadataCollection = null;
     this.isStreaming = this.model.streaming;
-
     // Bind methods to preserve 'this' context
     this.callModel = this.callModel.bind(this);
     this.shouldContinue = this.shouldContinue.bind(this);
@@ -62,6 +62,8 @@ export class ChatEngine {
 
   async initialize() {
     const res = await initializeMongoDB<ChatMetadata>(this.mode);
+    const mcpsTools = await initMcps();
+    this.tools = [...this.tools, ...mcpsTools];
     this.checkpointer = res.checkpointer;
     this.chatMetadataCollection = res.chatMetadataCollection;
     return this;
@@ -255,14 +257,22 @@ export class ChatEngine {
             id: rawMessage.id,
           };
         } else if (isToolMessage(rawMessage)) {
-          // NOTE Third party typing issue
-          const toolMessage = JSON.parse(
-            rawMessage.content as any
-          ) as TavilySearchResponse;
-          yield {
-            role: Role.ToolMessage,
-            searchInfo: this.getTavityToolInfo(toolMessage.results),
-          };
+          const { name, content } = rawMessage;
+          if (name === 'tavily_search') {
+            const toolMessage =
+              typeof content === 'string'
+                ? (JSON.parse(content) as TavilySearchResponse)
+                : { results: [] };
+            yield {
+              role: Role.ToolMessage,
+              searchInfo: this.getTavityToolInfo(toolMessage.results),
+            };
+          } else {
+            yield {
+              role: Role.ToolMessage,
+              searchInfo: `#### ${name}`,
+            };
+          }
         }
       }
     } catch (error) {

@@ -4,9 +4,16 @@ import { defineConfig } from 'vite';
 import tsconfigPaths from 'vite-tsconfig-paths';
 import path from 'path';
 import svgr from 'vite-plugin-svgr';
+import devtoolsJson from 'vite-plugin-devtools-json';
 
 export default defineConfig({
-  plugins: [tailwindcss(), reactRouter(), tsconfigPaths(), svgr()],
+  plugins: [
+    tailwindcss(),
+    reactRouter(),
+    tsconfigPaths(),
+    svgr(),
+    devtoolsJson(),
+  ],
   server: { port: 3000, host: '0.0.0.0' },
   resolve: {
     alias: {

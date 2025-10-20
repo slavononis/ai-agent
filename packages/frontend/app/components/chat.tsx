@@ -1,8 +1,8 @@
 'use client';
 import { useRef, useEffect, useState, useMemo } from 'react';
 import { ChatInput } from './chat-input';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { continueProjectRequest, getProjectDetails } from '@/services/project';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { continueProjectRequest } from '@/services/project';
 import { Link, useParams } from 'react-router';
 import { displayToastError } from '@/helpers/display-toast';
 import { MarkdownRenderer } from './markdown-renderer';
@@ -16,7 +16,7 @@ import {
   setStructuralContent,
 } from '@/utils/chat-formatter';
 import { Mode } from '@/routes/home';
-import { continueChatStream, getChatDetails } from '@/services/conversation';
+import { continueChatStream } from '@/services/conversation';
 import { Button } from './ui/button';
 import { ChevronDown, Loader } from 'lucide-react';
 import { Skeleton } from './ui/skeleton';
@@ -26,6 +26,7 @@ import { ChatScrollbar, type ChatScrollbarRef } from './chat-scrollbar';
 import { Alert, AlertDescription } from './ui/alert';
 import { MessageActions } from './message-actions';
 import { showNotification } from '@/helpers/browser-notification';
+import { useChatData } from '@/hooks/use-chat';
 
 type ChatProps = {
   mode: Mode;
@@ -222,14 +223,7 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
     },
   });
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: getChatQueryKey(id!, mode),
-    queryFn: () =>
-      isChatMode
-        ? getChatDetails({ projectId: id! })
-        : getProjectDetails({ projectId: id! }),
-    enabled: (enabled) => !enabled.state.data?._initialThought && !!id,
-  });
+  const { data, isLoading, error } = useChatData({ mode });
 
   const messages = useMemo(() => data?.messages || [], [data?.messages]);
 
@@ -340,7 +334,6 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
           </>
           <ChatScrollbar
             ref={scrollbarRef}
-            containerRef={chatContainerRef}
             mode={mode}
             onSelect={(msgId) => {
               requestAnimationFrame(() => {

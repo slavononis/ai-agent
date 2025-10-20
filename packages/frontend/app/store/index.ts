@@ -13,6 +13,6 @@ type StoreState = {
 };
 
 export const useLLMModel = create<StoreState>((set) => ({
-  model: 'gpt-5-nano',
+  model: 'deepseek-chat',
   setModel: (model) => set({ model }),
 }));

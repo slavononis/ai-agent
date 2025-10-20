@@ -1,9 +1,5 @@
 import { TreeView } from './tree-view';
 import { Link, useParams } from 'react-router';
-import { useQuery } from '@tanstack/react-query';
-import { getChatQueryKey } from './chat.utils';
-import { getProjectDetails } from '@/services/project';
-import { Role } from '@monorepo/shared';
 import { chatRoles, getFormattedMessage } from '@/utils/chat-formatter';
 import {
   ResizableHandle,
@@ -26,6 +22,7 @@ import { FileBtn } from './file-btn';
 import { Input } from './ui/input';
 import { Mode } from '@/routes/home';
 import { RoutesPath } from '@/utils/routes.config';
+import { useChatData } from '@/hooks/use-chat';
 
 export const ProjectContent = () => {
   const { id } = useParams<{ id: string }>();
@@ -33,11 +30,7 @@ export const ProjectContent = () => {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [activeFile, setActiveFile] = useState<string>('');
   const [headerButtons, setHeaderButtons] = useState<string[]>([]);
-  const { data, isLoading } = useQuery({
-    queryKey: getChatQueryKey(id!, Mode.Code),
-    queryFn: () => getProjectDetails({ projectId: id! }),
-    enabled: !!id,
-  });
+  const { data, isLoading } = useChatData({ mode: Mode.Code });
 
   const lastAssistantMessage = data?.messages
     ?.slice()

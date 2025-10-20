@@ -5,14 +5,11 @@ import React, {
   forwardRef,
   useEffect,
   useMemo,
+  memo,
 } from 'react';
 import { Mode } from '@/routes/home';
-import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { getChatQueryKey } from './chat.utils';
-import { useParams } from 'react-router';
-import { getChatDetails } from '@/services/conversation';
-import { getProjectDetails } from '@/services/project';
+
 import { cn } from '@/lib/utils';
 import {
   chatRoles,
@@ -20,33 +17,24 @@ import {
   getStructuralContent,
 } from '@/utils/chat-formatter';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
+import { useChatData } from '@/hooks/use-chat';
 
 type ChatScrollbarProps = {
   mode: Mode;
   onSelect: (msgId: string) => void;
-  containerRef: React.RefObject<HTMLDivElement | null>;
 };
 
 export type ChatScrollbarRef = {
   sync: (msgId: string) => void;
 };
 
-export const ChatScrollbar = forwardRef<ChatScrollbarRef, ChatScrollbarProps>(
-  ({ mode, onSelect, containerRef: parentRef }, ref) => {
-    const { id } = useParams();
+export const _ChatScrollbar = forwardRef<ChatScrollbarRef, ChatScrollbarProps>(
+  ({ mode, onSelect }, ref) => {
     const isChatMode = mode === Mode.Chat;
     const containerRef = useRef<HTMLDivElement>(null);
     const [active, setActive] = useState<string | null>(null);
 
-    const { data, isLoading, error } = useQuery({
-      queryKey: getChatQueryKey(id!, mode),
-      queryFn: () =>
-        isChatMode
-          ? getChatDetails({ projectId: id! })
-          : getProjectDetails({ projectId: id! }),
-      enabled: (enabled) => !enabled.state.data?._initialThought && !!id,
-    });
-
+    const { data, isLoading, error } = useChatData({ mode });
     const messages = useMemo(() => {
       return data?.messages || [];
     }, [data?.messages]);
@@ -177,6 +165,11 @@ export const ChatScrollbar = forwardRef<ChatScrollbarRef, ChatScrollbarProps>(
       </div>
     );
   }
+);
+
+export const ChatScrollbar = memo(
+  _ChatScrollbar,
+  (prevProps, nextProps) => prevProps.mode === nextProps.mode
 );
 
 ChatScrollbar.displayName = 'ChatScrollbar';

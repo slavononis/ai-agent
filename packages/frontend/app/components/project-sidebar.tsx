@@ -7,23 +7,15 @@ import {
   SidebarHeader,
 } from '@/components/ui/sidebar';
 import { Chat } from './chat';
-import { useQuery } from '@tanstack/react-query';
-import { getChatQueryKey } from './chat.utils';
-import { getProjectDetails } from '@/services/project';
-import { Link, useParams } from 'react-router';
 import { chatRoles, getFormattedMessage } from '@/utils/chat-formatter';
 import { Mode } from '@/routes/home';
 import { ProjectList } from './project-list';
+import { useChatData } from '@/hooks/use-chat';
 
 export function ProjectSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar>) {
-  const { id } = useParams<{ id: string }>();
-  const { data } = useQuery({
-    queryKey: getChatQueryKey(id!, Mode.Code),
-    queryFn: () => getProjectDetails({ projectId: id! }),
-    enabled: !!id,
-  });
+  const { data } = useChatData({ mode: Mode.Code });
   const lastAssistantMessage = data?.messages
     ?.slice()
     .reverse()

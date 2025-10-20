@@ -3,6 +3,7 @@ import 'highlight.js/styles/github-dark.css';
 import {
   Check,
   Copy,
+  ExternalLink,
   FileIcon,
   MessageSquareCode,
   ScanEye,
@@ -48,14 +49,16 @@ const CodeRenderer: React.FC<
 > = ({ className, children, ...props }) => {
   const [copied, setCopied] = useState(false);
   const [viewSvg, setViewSvg] = useState(false);
-
+  const codeRef = React.useRef<HTMLDivElement>(null);
   const match = /language-(\w+)/.exec(className || '');
   const language = match ? match?.[1] : '';
   const isSVG = language === 'svg';
 
   const handleCopy = async (content: React.ReactNode) => {
     try {
-      const text = getTextFromReactNode(content);
+      const text =
+        codeRef.current?.textContent || getTextFromReactNode(content);
+
       await navigator.clipboard.writeText(text);
       setCopied(true);
       setTimeout(() => setCopied(false), 1000);
@@ -91,7 +94,9 @@ const CodeRenderer: React.FC<
                   />
                 )}
               </TooltipTrigger>
-              <TooltipContent>View Image</TooltipContent>
+              <TooltipContent>
+                {isSVG ? 'View SVG' : 'View Code'}
+              </TooltipContent>
             </Tooltip>
           )}
 
@@ -121,6 +126,7 @@ const CodeRenderer: React.FC<
             'relative border border-color-border border-t-0 rounded-b-md !p-3.5 !bg-primary/10 !text-sm !pt-2 mb-2'
           )}
           {...props}
+          ref={codeRef}
         >
           {children}
         </code>
@@ -135,7 +141,17 @@ const _MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
       <ReactMarkdown
         children={content}
         remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeHighlight, rehypeKatex]}
+        rehypePlugins={[
+          [
+            rehypeHighlight,
+            {
+              aliases: {
+                xml: ['vue', 'sfc'],
+              },
+            },
+          ],
+          rehypeKatex,
+        ]}
         components={{
           h1: ({ children }) => (
             <h1 className="text-4xl font-bold mb-2 last:mb-0 text-foreground">
@@ -241,11 +257,11 @@ const _MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
           a: ({ node, children, ...props }) => (
             <a
               {...props}
-              className="text-accent hover:text-accent/90 visited:text-accent/50 underline underline-offset-2 transition-colors font-body"
+              className="inline-flex text-sm gap-2 text-accent hover:text-accent/90 visited:text-accent/50 underline underline-offset-2 transition-colors font-body"
               target="_blank"
               rel="noreferrer"
             >
-              {children}
+              {children} <ExternalLink className="size-4" />
             </a>
           ),
           img: ({ node, ...props }) => {
