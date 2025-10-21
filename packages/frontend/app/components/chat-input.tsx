@@ -84,6 +84,13 @@ export const _ChatInput: React.FC<ChatInputProps> = ({
         fileInputRef.current.value = '';
       }
     }
+
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+        textareaRef.current.style.height = '50px'; // Reset to min-height
+      }
+    }, 0);
   };
 
   const autoGrow = () => {

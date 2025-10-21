@@ -49,7 +49,7 @@ export async function createHumanMessage(
               .map((doc: any) => doc.pageContent)
               .join('\n\n');
             content.push({
-              type: 'file',
+              type: 'text',
               filename,
               text: `--- Content of ${filename} ---\n${extracted}`,
             });

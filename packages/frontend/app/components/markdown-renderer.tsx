@@ -1,5 +1,5 @@
 import 'highlight.js/styles/github-dark.css';
-
+import 'katex/dist/katex.min.css';
 import {
   Check,
   Copy,

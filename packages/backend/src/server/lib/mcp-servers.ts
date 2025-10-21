@@ -26,6 +26,7 @@ export const initMcps = async () => {
     return (global._mcpsTools = tools);
   } catch (error) {
     console.error('Error in initMcps:', error);
-    throw error;
+    // throw error;
+    return [];
   }
 };

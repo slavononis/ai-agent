@@ -257,22 +257,11 @@ export class ChatEngine {
             id: rawMessage.id,
           };
         } else if (isToolMessage(rawMessage)) {
-          const { name, content } = rawMessage;
-          if (name === 'tavily_search') {
-            const toolMessage =
-              typeof content === 'string'
-                ? (JSON.parse(content) as TavilySearchResponse)
-                : { results: [] };
-            yield {
-              role: Role.ToolMessage,
-              searchInfo: this.getTavityToolInfo(toolMessage.results),
-            };
-          } else {
-            yield {
-              role: Role.ToolMessage,
-              searchInfo: `#### ${name}`,
-            };
-          }
+          const { name } = rawMessage;
+          yield {
+            role: Role.ToolMessage,
+            searchInfo: `#### ${name}`,
+          };
         }
       }
     } catch (error) {
@@ -326,6 +315,10 @@ export class ChatEngine {
     return await this.chatMetadataCollection?.findOne({ thread_id });
   }
 
+  async getChatsMetadata(): Promise<ChatMetadata[] | null | undefined> {
+    return await this.chatMetadataCollection?.find({}).toArray();
+  }
+
   async createHumanMessage(
     text: string,
     files?: Express.Multer.File[] | undefined
@@ -370,40 +363,9 @@ export class ChatEngine {
     };
   }
 
-  async getThreadList(): Promise<ChatMetadata[]> {
-    if (!this.checkpointer) {
-      return [];
-    }
-
-    const chatMap = new Map<string, { thread_id: string; ts: string }>();
-
-    for await (const { config, checkpoint } of this.checkpointer?.list({
-      configurable: {},
-    })) {
-      const ts = checkpoint.ts;
-      const threadId = config?.configurable?.thread_id;
-      if (threadId) {
-        if (!chatMap.has(threadId) || chatMap.get(threadId)!.ts < ts) {
-          chatMap.set(threadId, { thread_id: threadId, ts });
-        }
-      }
-    }
-
-    const chatsWithMetadata = await Promise.all(
-      Array.from(chatMap.values()).map(async ({ thread_id, ts }) => {
-        const metadata = await this.getChatMetadata(thread_id);
-        return {
-          thread_id,
-          chat_name: metadata?.chat_name || 'New Chat',
-          created_at: metadata?.created_at!,
-          updated_at: metadata?.updated_at! || ts,
-          message_count: metadata?.message_count || 1,
-        };
-      })
-    );
-
-    // Sort by updated_at desc (latest first)
-    const sortedChats = chatsWithMetadata.sort(
+  async getThreadList(): Promise<ChatMetadata[] | undefined> {
+    const chatsWithMetadata = await this.getChatsMetadata();
+    const sortedChats = chatsWithMetadata?.sort(
       (a, b) =>
         new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
     );

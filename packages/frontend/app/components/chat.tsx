@@ -270,7 +270,7 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
       ) : (
         <div
           ref={chatContainerRef}
-          className="overflow-y-auto flex"
+          className="overflow-y-auto flex relative"
           onScroll={handleScroll}
         >
           <>
