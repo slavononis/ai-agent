@@ -23,7 +23,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { RoutesPath } from '@/utils/routes.config';
 import { formatDate } from '@/utils/dateFormats';
 import { cn } from '@/lib/utils';
-import { Skeleton } from './ui/skeleton';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useChatList, useDeleteChat } from '@/hooks/use-chats-list';
 import { useChatMutationState } from '@/hooks/use-chat';
 

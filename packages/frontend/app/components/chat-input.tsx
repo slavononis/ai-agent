@@ -1,6 +1,7 @@
+'use client';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { Textarea } from './ui/textarea';
-import { Button } from './ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
 import {
   ArrowUp,
   Loader,
@@ -8,14 +9,13 @@ import {
   MicOff,
   Plus,
   File as FileIcon,
-  Image as ImageIcon,
   X,
 } from 'lucide-react';
-import { Card, CardContent, CardFooter } from './ui/card';
-import SpeechRecognition, {
-  useSpeechRecognition,
-} from 'react-speech-recognition';
+import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { LLMSelect } from './LLM-Select';
+import { speechToTextRequest } from '@/services/transcript'; // Adjust import path as needed
+import { useReactMediaRecorder } from 'react-media-recorder';
+import { useMutation } from '@tanstack/react-query';
 
 type ChatInputProps = {
   onSend?: (message: string, files: File[] | null) => void;
@@ -56,21 +56,36 @@ export const _ChatInput: React.FC<ChatInputProps> = ({
   clearOnSend = true,
 }) => {
   const [value, setValue] = useState('');
-  // Store files internally as an array so we can remove individual ones
   const [files, setFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const {
-    transcript,
-    listening,
-    resetTranscript,
-    browserSupportsSpeechRecognition,
-  } = useSpeechRecognition();
+  const { status, startRecording, stopRecording, clearBlobUrl } =
+    useReactMediaRecorder({
+      audio: true,
+      onStop: (_, blob) => {
+        if (blob) {
+          const audioFile = new File([blob], 'recording.webm', {
+            type: 'audio/webm',
+          });
+          mutate({ audioFile });
+        }
+      },
+    });
+
+  const { mutate, isPending: isTranscribing } = useMutation({
+    mutationFn: speechToTextRequest,
+    onSuccess: (data) => {
+      setValue((prev) => prev + (prev ? ' ' : '') + data.text);
+      autoGrow();
+      clearBlobUrl();
+    },
+  });
+
+  const isRecording = status === 'recording';
 
   const handleSendingProcess = () => {
     if (!value.trim() || loading) return;
-    // Convert File[] -> FileList for onSend compatibility
     const dt = new DataTransfer();
     files.forEach((f) => dt.items.add(f));
     const fileListToSend = dt.files.length ? dt.files : null;
@@ -88,7 +103,7 @@ export const _ChatInput: React.FC<ChatInputProps> = ({
     setTimeout(() => {
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
-        textareaRef.current.style.height = '50px'; // Reset to min-height
+        textareaRef.current.style.height = '50px';
       }
     }, 0);
   };
@@ -114,22 +129,14 @@ export const _ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const handleAudioRecording = () => {
-    if (listening) {
-      SpeechRecognition.stopListening();
-      resetTranscript();
-      return;
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
     }
-    SpeechRecognition.startListening({ continuous: true });
   };
 
   const isMobile = /Mobi|Android/i.test(navigator.userAgent);
-
-  useEffect(() => {
-    if (transcript) {
-      setValue(transcript);
-      autoGrow();
-    }
-  }, [transcript]);
 
   // Create object URLs for image previews
   const previews = useMemo(
@@ -247,34 +254,34 @@ export const _ChatInput: React.FC<ChatInputProps> = ({
         </div>
 
         <div className="flex gap-2">
-          {browserSupportsSpeechRecognition && (
-            <Button
-              size="icon"
-              variant={listening ? 'destructive' : 'outline'}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleAudioRecording();
-              }}
-              className="rounded-full relative"
-              disabled={loading}
-            >
-              {listening ? (
-                <>
-                  <Mic className="!size-4 animate-ping" />
-                  <Mic className="!size-4 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-                </>
-              ) : (
-                <MicOff className="!size-4" />
-              )}
-            </Button>
-          )}
+          <Button
+            size="icon"
+            variant={isRecording ? 'destructive' : 'outline'}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleAudioRecording();
+            }}
+            className="rounded-full relative"
+            disabled={loading || isTranscribing}
+          >
+            {isTranscribing ? (
+              <Loader className="!size-4 animate-spin" />
+            ) : isRecording ? (
+              <>
+                <Mic className="!size-4 animate-ping" />
+                <Mic className="!size-4 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+              </>
+            ) : (
+              <MicOff className="!size-4" />
+            )}
+          </Button>
           <Button
             size="icon"
             onClick={(e) => {
               e.stopPropagation();
               handleSendingProcess();
             }}
-            disabled={loading || !value.trim() || listening}
+            disabled={loading || !value.trim() || isRecording || isTranscribing}
             className="rounded-full"
           >
             {loading ? (

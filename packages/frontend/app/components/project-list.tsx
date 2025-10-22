@@ -5,14 +5,14 @@ import {
   SheetTitle,
   SheetTrigger,
   Sheet,
-} from './ui/sheet';
-import { Button } from './ui/button';
+} from '@/components/ui/sheet';
+import { Button } from '@/components/ui/button';
 import { RoutesPath } from '@/utils/routes.config';
 
 import { Mode } from '@/routes/home';
 import { Link, useParams } from 'react-router';
 
-import { Skeleton } from './ui/skeleton';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { formatDate } from '@/utils/dateFormats';
 import {
@@ -25,7 +25,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from './ui/alert-dialog';
+} from '@/components/ui/alert-dialog';
 import { useChatList, useDeleteChat } from '@/hooks/use-chats-list';
 import { useChatMutationState } from '@/hooks/use-chat';
 

@@ -3,6 +3,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import project from './routes/project';
+import transcript from './routes/transcript';
 import conversation from './routes/conversation';
 import dbConnect from './lib/mongoDB';
 import { initMcps } from './lib/mcp-servers';
@@ -12,6 +13,7 @@ app.use(cors());
 app.use(express.json());
 app.use('/api/project', project);
 app.use('/api/conversation', conversation);
+app.use('/api/transcript', transcript);
 
 async function startServer() {
   try {

@@ -16,7 +16,11 @@ import {
   getFormattedMessage,
   getStructuralContent,
 } from '@/utils/chat-formatter';
-import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useChatData } from '@/hooks/use-chat';
 
 type ChatScrollbarProps = {

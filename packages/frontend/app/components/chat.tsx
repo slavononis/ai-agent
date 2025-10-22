@@ -17,13 +17,13 @@ import {
 } from '@/utils/chat-formatter';
 import { Mode } from '@/routes/home';
 import { continueChatStream } from '@/services/conversation';
-import { Button } from './ui/button';
+import { Button } from '@/components/ui/button';
 import { ChevronDown, Loader } from 'lucide-react';
-import { Skeleton } from './ui/skeleton';
+import { Skeleton } from '@/components/ui/skeleton';
 import { RoutesPath } from '@/utils/routes.config';
 import { useLLMModel } from '@/store';
 import { ChatScrollbar, type ChatScrollbarRef } from './chat-scrollbar';
-import { Alert, AlertDescription } from './ui/alert';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { MessageActions } from './message-actions';
 import { showNotification } from '@/helpers/browser-notification';
 import { useChatData } from '@/hooks/use-chat';

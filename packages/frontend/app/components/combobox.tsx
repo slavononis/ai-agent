@@ -5,7 +5,11 @@ import { CheckIcon, ChevronsUpDownIcon } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Popover, PopoverTrigger, PopoverContent } from './ui/popover';
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from '@/components/ui/popover';
 import {
   Command,
   CommandEmpty,
@@ -13,7 +17,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from './ui/command';
+} from '@/components/ui/command';
 
 type ComboboxProps = {
   value: string;

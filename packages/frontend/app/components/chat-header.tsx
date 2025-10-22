@@ -1,6 +1,6 @@
 import { useChatData } from '@/hooks/use-chat';
 import { Mode } from '@/routes/home';
-import { Skeleton } from './ui/skeleton';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export const ChatHeader = () => {
   const { data, isLoading } = useChatData({ mode: Mode.Chat });

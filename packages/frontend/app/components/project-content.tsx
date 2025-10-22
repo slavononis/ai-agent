@@ -15,11 +15,11 @@ import {
 import { useEffect, useState } from 'react';
 import { MarkdownCode } from './markdown-code';
 import WebAppPreView from './web-app-preview';
-import { Button } from './ui/button';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Code, PlusIcon, Search } from 'lucide-react';
 import { FileBtn } from './file-btn';
-import { Input } from './ui/input';
+import { Input } from '@/components/ui/input';
 import { Mode } from '@/routes/home';
 import { RoutesPath } from '@/utils/routes.config';
 import { useChatData } from '@/hooks/use-chat';

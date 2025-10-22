@@ -1,9 +1,14 @@
 import { displayToastError } from '@/helpers/display-toast';
 import { useState } from 'react';
-import { Button } from './ui/button';
+import { Button } from '@/components/ui/button';
 import { Check, Copy } from 'lucide-react';
-import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { MessagePlayer } from './message-player';
 
 type MessageActionsProps = {
   text: string;
@@ -30,7 +35,7 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
 
   return (
     <div
-      className={cn('flex gap-2 mb-2 justify-end', { 'justify-start': isAi })}
+      className={cn('flex gap-0 mb-2 justify-end', { 'justify-start': isAi })}
     >
       <Tooltip>
         <TooltipTrigger asChild>
@@ -44,6 +49,7 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
         </TooltipTrigger>
         <TooltipContent>Copy</TooltipContent>
       </Tooltip>
+      <MessagePlayer text={text} />
     </div>
   );
 };
