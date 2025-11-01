@@ -26,17 +26,13 @@ import { ChatScrollbar, type ChatScrollbarRef } from './chat-scrollbar';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { MessageActions } from './message-actions';
 import { showNotification } from '@/helpers/browser-notification';
-import { useChatData } from '@/hooks/use-chat';
+import { useChatData, useUpdateChatRequest } from '@/hooks/use-chat';
 
 type ChatProps = {
   mode: Mode;
 };
 
 export const Chat: React.FC<ChatProps> = ({ mode }) => {
-  const { id } = useParams();
-  const queryClient = useQueryClient();
-  const model = useLLMModel((state) => state.model);
-
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const scrollbarRef = useRef<ChatScrollbarRef>(null);
@@ -99,129 +95,7 @@ export const Chat: React.FC<ChatProps> = ({ mode }) => {
     });
   };
 
-  const { mutate, isPending } = useMutation({
-    mutationKey: getChatQueryKey(id!, mode),
-    mutationFn: ({ message, files }: { message: string; files?: File[] }) => {
-      const tempChatId = `temp-${Date.now().toString()}`;
-      queryClient.setQueryData<MessagesResponseDTO>(
-        getChatQueryKey(id!, mode),
-        (oldData) => ({
-          ...oldData,
-          thread_id: id!,
-          messages: [
-            ...(oldData?.messages || []),
-            {
-              id: tempChatId,
-              thread_id: id!,
-              content: files ? setStructuralContent(message, files) : message,
-              role: Role.HumanMessage,
-            },
-          ],
-        })
-      );
-      scrollToBottom();
-      return isChatMode
-        ? continueChatStream({
-            message,
-            model,
-            files,
-            threadId: id!,
-            onComplete: (chunk) => {
-              showNotification('Answer From chat is ready.');
-              queryClient.setQueryData<MessagesResponseDTO>(
-                getChatQueryKey(chunk.thread_id!, mode),
-                (oldData) => {
-                  return {
-                    ...oldData!,
-                    searchInfo: '',
-                  };
-                }
-              );
-            },
-            onSearchInfo: (chunk) => {
-              queryClient.setQueryData<MessagesResponseDTO>(
-                getChatQueryKey(chunk.thread_id!, mode),
-                (oldData) => {
-                  return {
-                    ...oldData!,
-                    searchInfo: chunk.searchInfo,
-                  };
-                }
-              );
-            },
-            onChunk: (chunk) => {
-              queryClient.setQueryData<MessagesResponseDTO>(
-                getChatQueryKey(id!, mode),
-                (oldData) => {
-                  const lastMessage =
-                    oldData?.messages?.[oldData.messages.length - 1];
-                  if (lastMessage && lastMessage.id === chunk.id) {
-                    const updated = [...oldData.messages];
-                    updated[updated.length - 1] = {
-                      ...lastMessage,
-                      content: lastMessage.content + chunk.content!,
-                    };
-                    return { ...oldData, messages: updated };
-                  }
-                  return {
-                    ...oldData!,
-                    searchInfo: '',
-                    messages: [
-                      ...(oldData?.messages || []),
-                      {
-                        id: chunk.id!,
-                        thread_id: chunk.thread_id!,
-                        content: chunk.content!,
-                        role: chunk.role!,
-                      },
-                    ],
-                  };
-                }
-              );
-            },
-            onError: (error) => {
-              displayToastError(
-                error.error || 'Failed to send message. Please try again.'
-              );
-              queryClient.setQueryData<MessagesResponseDTO>(
-                getChatQueryKey(id!, mode),
-                (oldData) => ({
-                  thread_id: id!,
-                  messages: (oldData?.messages || []).filter(
-                    (msg) => !msg.id.startsWith('temp-')
-                  ),
-                })
-              );
-            },
-          })
-        : continueProjectRequest({ message, thread_id: id!, files, model });
-    },
-    onSuccess: (data) => {
-      if (!data) return;
-      showNotification('Answer From chat is ready.');
-
-      queryClient.setQueryData<MessagesResponseDTO>(
-        getChatQueryKey(id!, mode),
-        (oldData) => ({
-          thread_id: id!,
-          messages: [...(oldData?.messages || []), data],
-        })
-      );
-      if (autoScrollEnabled && !isUserScrolling) scrollToBottom();
-    },
-    onError: () => {
-      displayToastError('Failed to send message. Please try again.');
-      queryClient.setQueryData<MessagesResponseDTO>(
-        getChatQueryKey(id!, mode),
-        (oldData) => ({
-          thread_id: id!,
-          messages: (oldData?.messages || []).filter(
-            (msg) => !msg.id.startsWith('temp-')
-          ),
-        })
-      );
-    },
-  });
+  const { mutate, isPending } = useUpdateChatRequest({ mode });
 
   const { data, isLoading, error } = useChatData({ mode });
 

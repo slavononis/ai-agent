@@ -10,12 +10,20 @@ import {
 import { Mode } from '@/routes/home';
 import { useLLMModel } from '@/store';
 import { RoutesPath } from '@/utils/routes.config';
-import { getProjectDetails, startProjectRequest } from '@/services/project';
+import {
+  continueProjectRequest,
+  getProjectDetails,
+  startProjectRequest,
+} from '@/services/project';
 import { getChatQueryKey } from '@/components/chat.utils';
 import { displayToastError } from '@/helpers/display-toast';
 import { setStructuralContent } from '@/utils/chat-formatter';
 import { showNotification } from '@/helpers/browser-notification';
-import { getChatDetails, startChatStream } from '@/services/conversation';
+import {
+  continueChatStream,
+  getChatDetails,
+  startChatStream,
+} from '@/services/conversation';
 import { useChatListUpdate } from './use-chats-list';
 
 const useChatDataUpdate = ({ mode }: { mode: Mode }) => {
@@ -239,6 +247,116 @@ export const useNewChatRequest = ({ mode }: { mode: Mode }) => {
     mutate,
     isPending,
   };
+};
+
+export const useUpdateChatRequest = ({ mode }: { mode: Mode }) => {
+  const isChatMode = mode === Mode.Chat;
+  const model = useLLMModel((state) => state.model);
+  const { id } = useParams<{ id: string }>();
+  const updateChatData = useChatDataUpdate({ mode });
+
+  return useMutation({
+    mutationKey: getChatQueryKey(id!, mode),
+    mutationFn: ({ message, files }: { message: string; files?: File[] }) => {
+      const tempChatId = `temp-${Date.now().toString()}`;
+      updateChatData(id!, (oldData) => ({
+        ...oldData,
+        thread_id: id!,
+        messages: [
+          ...(oldData?.messages || []),
+          {
+            id: tempChatId,
+            thread_id: id!,
+            content: files ? setStructuralContent(message, files) : message,
+            role: Role.HumanMessage,
+          },
+        ],
+      }));
+      // scrollToBottom();
+      return isChatMode
+        ? continueChatStream({
+            message,
+            model,
+            files,
+            threadId: id!,
+            onComplete: (chunk) => {
+              showNotification('Answer From chat is ready.');
+              updateChatData(chunk.thread_id!, (oldData) => {
+                return {
+                  ...oldData!,
+                  searchInfo: '',
+                };
+              });
+            },
+            onSearchInfo: (chunk) => {
+              updateChatData(chunk.thread_id!, (oldData) => {
+                return {
+                  ...oldData!,
+                  searchInfo: chunk.searchInfo,
+                };
+              });
+            },
+            onChunk: (chunk) => {
+              updateChatData(id!, (oldData) => {
+                const lastMessage =
+                  oldData?.messages?.[oldData.messages.length - 1];
+                if (lastMessage && lastMessage.id === chunk.id) {
+                  const updated = [...oldData.messages];
+                  updated[updated.length - 1] = {
+                    ...lastMessage,
+                    content: lastMessage.content + chunk.content!,
+                  };
+                  return { ...oldData, messages: updated };
+                }
+                return {
+                  ...oldData!,
+                  searchInfo: '',
+                  messages: [
+                    ...(oldData?.messages || []),
+                    {
+                      id: chunk.id!,
+                      thread_id: chunk.thread_id!,
+                      content: chunk.content!,
+                      role: chunk.role!,
+                    },
+                  ],
+                };
+              });
+            },
+            onError: (error) => {
+              displayToastError(
+                error.error || 'Failed to send message. Please try again.'
+              );
+              updateChatData(id!, (oldData) => ({
+                thread_id: id!,
+                messages: (oldData?.messages || []).filter(
+                  (msg) => !msg.id.startsWith('temp-')
+                ),
+              }));
+            },
+          })
+        : continueProjectRequest({ message, thread_id: id!, files, model });
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      showNotification('Answer From chat is ready.');
+
+      updateChatData(id!, (oldData) => ({
+        thread_id: id!,
+        messages: [...(oldData?.messages || []), data],
+      }));
+      // if (autoScrollEnabled && !isUserScrolling) scrollToBottom();
+    },
+    onError: () => {
+      displayToastError('Failed to send message. Please try again.');
+      updateChatData(id!, (oldData) => ({
+        thread_id: id!,
+        messages: (oldData?.messages || []).filter(
+          (msg) => !msg.id.startsWith('temp-')
+        ),
+      }));
+    },
+  });
 };
 
 export const useChatMutationState = ({ mode }: { mode: Mode }) => {
