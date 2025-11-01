@@ -1,5 +1,6 @@
 import type { Route } from './+types/home';
 import { Project } from '@/components/project';
+import { ProtectedRoute } from '@/components/protected-route';
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -9,5 +10,9 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export default function ProjectPage() {
-  return <Project />;
+  return (
+    <ProtectedRoute>
+      <Project />
+    </ProtectedRoute>
+  );
 }

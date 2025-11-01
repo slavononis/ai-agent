@@ -9,6 +9,7 @@ import {
 import { ToastContainer } from 'react-toastify';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Route } from './+types/root';
+import { AuthProvider } from './contexts/auth.context';
 import './app.css';
 
 export const links: Route.LinksFunction = () => [
@@ -64,7 +65,9 @@ const queryClient = new QueryClient({
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <Outlet />
+      <AuthProvider>
+        <Outlet />
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

@@ -6,122 +6,144 @@ import { ChatEngine } from '../chat-manager/chat-engine';
 import { getFormattedMessage } from '../utils/message-format';
 import { generateChatName } from '../chat-manager/generate-chat-name';
 import { ALLOWED_MIME_TYPES, AppMimeType } from '../chat-manager/utils';
+import { authMiddleware, AuthRequest } from '../middleware/auth.middleware';
 
-const baseEngineOptions: ConstructorParameters<typeof ChatEngine>[0] = {
+const router = Router();
+
+// Apply auth middleware to all routes
+router.use(authMiddleware);
+
+const getBaseEngineOptions = (
+  userId: string
+): ConstructorParameters<typeof ChatEngine>[0] => ({
   llmModel: 'gpt-4o-mini',
   tools: [],
   mode: 'user-project',
-};
-const router = Router();
+  userId,
+});
 
 const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
-router.post('/chat/start', upload.array('file', 5), async (req, res) => {
-  try {
-    const { message, model } = req.body;
-    const filesObj = req.files;
-    const files = Array.isArray(filesObj) ? filesObj : undefined;
+router.post(
+  '/chat/start',
+  upload.array('file', 5),
+  async (req: AuthRequest, res) => {
+    try {
+      const { message, model } = req.body;
+      const filesObj = req.files;
+      const files = Array.isArray(filesObj) ? filesObj : undefined;
+      const userId = req.userId!;
 
-    if (!message || typeof message !== 'string') {
-      return res.status(400).json({ error: 'Valid message required' });
-    }
+      if (!message || typeof message !== 'string') {
+        return res.status(400).json({ error: 'Valid message required' });
+      }
 
-    if (
-      files &&
-      files.length > 0 &&
-      files.some((file) => {
-        const mime = file.mimetype || '';
-        const isImage = mime.startsWith('image/');
-        return !isImage && !ALLOWED_MIME_TYPES.has(mime as AppMimeType);
-      })
-    ) {
-      return res.status(400).json({
-        error: 'Only image, PDF, Word, CSV, TXT, JSON files are supported',
+      if (
+        files &&
+        files.length > 0 &&
+        files.some((file) => {
+          const mime = file.mimetype || '';
+          const isImage = mime.startsWith('image/');
+          return !isImage && !ALLOWED_MIME_TYPES.has(mime as AppMimeType);
+        })
+      ) {
+        return res.status(400).json({
+          error: 'Only image, PDF, Word, CSV, TXT, JSON files are supported',
+        });
+      }
+      const chatEngine = new ChatEngine({
+        ...getBaseEngineOptions(userId),
+        llmModel: model,
       });
+      const agent = await chatEngine.initialize();
+
+      const userMessage = await agent.createHumanMessage(message, files);
+      const thread_id = agent.createUUID();
+      const reply = await agent.runMessage(thread_id, userMessage);
+      const data = getFormattedMessage(reply.toJSON(), thread_id);
+
+      const chatName = await generateChatName(
+        message,
+        reply.content.toString()
+      );
+      await agent.updateChatMetadata(thread_id, chatName, true);
+
+      const responseWithChatName = {
+        ...data,
+        reply,
+        chat_name: chatName,
+      };
+
+      return res.json(responseWithChatName);
+    } catch (err: any) {
+      const safeError = serializeError(err);
+      console.error('Error in /chat/start:', safeError);
+      return res.status(500).json({ error: safeError.message });
     }
-    const chatEngine = new ChatEngine({
-      ...baseEngineOptions,
-      llmModel: model,
-    });
-    const agent = await chatEngine.initialize();
-
-    const userMessage = await agent.createHumanMessage(message, files);
-    const thread_id = agent.createUUID();
-    const reply = await agent.runMessage(thread_id, userMessage);
-    const data = getFormattedMessage(reply.toJSON(), thread_id);
-
-    const chatName = await generateChatName(message, reply.content.toString());
-    await agent.updateChatMetadata(thread_id, chatName, true);
-
-    const responseWithChatName = {
-      ...data,
-      reply,
-      chat_name: chatName,
-    };
-
-    return res.json(responseWithChatName);
-  } catch (err: any) {
-    const safeError = serializeError(err);
-    console.error('Error in /chat/start:', safeError);
-    return res.status(500).json({ error: safeError.message });
   }
-});
+);
 
-router.post('/chat/continue', upload.array('file', 5), async (req, res) => {
-  try {
-    const { thread_id, message, model } = req.body;
-    const filesObj = req.files;
-    const files = Array.isArray(filesObj) ? filesObj : undefined;
+router.post(
+  '/chat/continue',
+  upload.array('file', 5),
+  async (req: AuthRequest, res) => {
+    try {
+      const { thread_id, message, model } = req.body;
+      const filesObj = req.files;
+      const files = Array.isArray(filesObj) ? filesObj : undefined;
+      const userId = req.userId!;
 
-    if (!thread_id || !message || typeof message !== 'string') {
-      return res
-        .status(400)
-        .json({ error: 'thread_id and valid message required' });
-    }
+      if (!thread_id || !message || typeof message !== 'string') {
+        return res
+          .status(400)
+          .json({ error: 'thread_id and valid message required' });
+      }
 
-    if (
-      files &&
-      files.length > 0 &&
-      files.some((file) => {
-        const mime = file.mimetype || '';
-        const isImage = mime.startsWith('image/');
-        return !isImage && !ALLOWED_MIME_TYPES.has(mime as AppMimeType);
-      })
-    ) {
-      return res.status(400).json({
-        error: 'Only image, PDF, Word, CSV, TXT, JSON files are supported',
+      if (
+        files &&
+        files.length > 0 &&
+        files.some((file) => {
+          const mime = file.mimetype || '';
+          const isImage = mime.startsWith('image/');
+          return !isImage && !ALLOWED_MIME_TYPES.has(mime as AppMimeType);
+        })
+      ) {
+        return res.status(400).json({
+          error: 'Only image, PDF, Word, CSV, TXT, JSON files are supported',
+        });
+      }
+      const chatEngine = new ChatEngine({
+        ...getBaseEngineOptions(userId),
+        llmModel: model,
       });
+      const agent = await chatEngine.initialize();
+
+      const userMessage = await agent.createHumanMessage(message, files);
+      const reply = await agent.runMessage(thread_id, userMessage);
+      const data = getFormattedMessage(reply.toJSON(), thread_id);
+
+      await agent.updateChatMetadata(thread_id);
+
+      return res.json({ ...data, reply });
+    } catch (err: any) {
+      const safeError = serializeError(err);
+      console.error('Error in /chat/continue:', safeError);
+      return res.status(500).json({ error: safeError.message });
     }
-    const chatEngine = new ChatEngine({
-      ...baseEngineOptions,
-      llmModel: model,
-    });
-    const agent = await chatEngine.initialize();
-
-    const userMessage = await agent.createHumanMessage(message, files);
-    const reply = await agent.runMessage(thread_id, userMessage);
-    const data = getFormattedMessage(reply.toJSON(), thread_id);
-
-    await agent.updateChatMetadata(thread_id);
-
-    return res.json({ ...data, reply });
-  } catch (err: any) {
-    const safeError = serializeError(err);
-    console.error('Error in /chat/continue:', safeError);
-    return res.status(500).json({ error: safeError.message });
   }
-});
+);
 
-router.get('/chat/:thread_id', async (req, res) => {
+router.get('/chat/:thread_id', async (req: AuthRequest, res) => {
   try {
     const { thread_id } = req.params;
+    const userId = req.userId!;
     if (!thread_id) {
       return res.status(400).json({ error: 'thread_id required' });
     }
 
-    const chatEngine = new ChatEngine(baseEngineOptions);
+    const chatEngine = new ChatEngine(getBaseEngineOptions(userId));
     const agent = await chatEngine.initialize();
     const threadDetails = await agent.getThreadDetails(thread_id);
 
@@ -138,9 +160,10 @@ router.get('/chat/:thread_id', async (req, res) => {
 });
 
 // Get all chats list
-router.get('/chats', async (_req, res) => {
+router.get('/chats', async (req: AuthRequest, res) => {
   try {
-    const chatEngine = new ChatEngine(baseEngineOptions);
+    const userId = req.userId!;
+    const chatEngine = new ChatEngine(getBaseEngineOptions(userId));
     const agent = await chatEngine.initialize();
     const chats = await agent.getThreadList();
 
@@ -153,10 +176,11 @@ router.get('/chats', async (_req, res) => {
 });
 
 // Update chat name
-router.patch('/chat/:thread_id/name', async (req, res) => {
+router.patch('/chat/:thread_id/name', async (req: AuthRequest, res) => {
   try {
     const { thread_id } = req.params;
     const { chat_name } = req.body;
+    const userId = req.userId!;
 
     if (!thread_id || !chat_name || typeof chat_name !== 'string') {
       return res
@@ -168,7 +192,7 @@ router.patch('/chat/:thread_id/name', async (req, res) => {
       return res.status(400).json({ error: 'Chat name too long' });
     }
 
-    const chatEngine = new ChatEngine(baseEngineOptions);
+    const chatEngine = new ChatEngine(getBaseEngineOptions(userId));
     const agent = await chatEngine.initialize();
 
     await agent.updateChatMetadata(thread_id, chat_name, false);
@@ -182,14 +206,15 @@ router.patch('/chat/:thread_id/name', async (req, res) => {
 });
 
 // Delete chat
-router.delete('/chat/:thread_id', async (req, res) => {
+router.delete('/chat/:thread_id', async (req: AuthRequest, res) => {
   try {
     const { thread_id } = req.params;
+    const userId = req.userId!;
     if (!thread_id) {
       return res.status(400).json({ error: 'thread_id required' });
     }
 
-    const chatEngine = new ChatEngine(baseEngineOptions);
+    const chatEngine = new ChatEngine(getBaseEngineOptions(userId));
     const agent = await chatEngine.initialize();
 
     await agent.deleteThread(thread_id);

@@ -11,6 +11,9 @@ import {
 } from '@/components/ui/select';
 import { useState } from 'react';
 import { useNewChatRequest } from '@/hooks/use-chat';
+import { ProtectedRoute } from '@/components/protected-route';
+import spaceJson from '@/lottie/space.json';
+
 export function meta({}: Route.MetaArgs) {
   return [
     { title: 'New React Router App' },
@@ -22,9 +25,8 @@ export enum Mode {
   Chat = 'Chat',
   Code = 'Code',
 }
-import spaceJson from '@/lottie/space.json';
 
-export default function Home() {
+function HomeContent() {
   const [mode, setMode] = useState<Mode>(Mode.Chat);
   const { mutate, isPending } = useNewChatRequest({ mode });
 
@@ -60,5 +62,13 @@ export default function Home() {
         />
       </div>
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <ProtectedRoute>
+      <HomeContent />
+    </ProtectedRoute>
   );
 }

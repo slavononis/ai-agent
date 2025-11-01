@@ -14,6 +14,7 @@ export interface ChatMetadata {
   created_at: string;
   updated_at: string;
   message_count: number;
+  user_id?: string;
 }
 
 export interface MessageModelDTO {

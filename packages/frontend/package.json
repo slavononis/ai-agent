@@ -5,7 +5,7 @@
   "scripts": {
     "build": "react-router build",
     "dev": "react-router dev",
-    "start": "react-router-serve ./build/server/index.js",
+    "start:server": "react-router-serve ./build/server/index.js",
     "start:client": "vite preview",
     "typecheck": "react-router typegen && tsc",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
@@ -29,6 +29,7 @@
     "@codemirror/lang-yaml": "^6.1.2",
     "@codemirror/language-data": "github:codemirror/language-data",
     "@codesandbox/sandpack-react": "^2.20.0",
+    "@hookform/resolvers": "^5.2.2",
     "@langchain/anthropic": "^0.3.28",
     "@monorepo/shared": "1.0.0",
     "@radix-ui/react-alert-dialog": "^1.1.15",
@@ -58,6 +59,7 @@
     "lucide-react": "^0.544.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-hook-form": "^7.66.0",
     "react-lottie-player": "^2.1.0",
     "react-markdown": "^10.1.0",
     "react-media-recorder": "^1.7.2",
@@ -70,6 +72,7 @@
     "remark-math": "^6.0.0",
     "tailwind-merge": "^3.3.1",
     "vite-plugin-svgr": "^4.5.0",
+    "zod": "^3.25.76",
     "zustand": "^5.0.8"
   },
   "devDependencies": {
