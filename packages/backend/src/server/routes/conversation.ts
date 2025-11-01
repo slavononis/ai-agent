@@ -5,194 +5,220 @@ import { ALLOWED_MIME_TYPES, AppMimeType } from '../chat-manager/utils';
 import { generateChatName } from '../chat-manager/generate-chat-name';
 import { ChatEngine } from '../chat-manager/chat-engine';
 import { serializeError } from '../utils/error';
+import { authMiddleware, AuthRequest } from '../middleware/auth.middleware';
 
 const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
-const baseEngineOptions: ConstructorParameters<typeof ChatEngine>[0] = {
+const router = Router();
+
+// Apply auth middleware to all routes
+router.use(authMiddleware);
+
+const getBaseEngineOptions = (
+  userId: string
+): ConstructorParameters<typeof ChatEngine>[0] => ({
   llmModel: 'gpt-4o-mini',
   tools: [tavilySearch],
   mode: 'user-chat',
-};
-
-const router = Router();
+  userId,
+});
 
 // Start a new chat
-router.post('/chat/start', upload.array('file', 5), async (req, res) => {
-  try {
-    const { message, model } = req.body;
-    const filesObj = req.files;
-    const files = Array.isArray(filesObj) ? filesObj : undefined;
-
-    if (!message || typeof message !== 'string') {
-      return res.status(400).json({ error: 'Valid message required' });
-    }
-
-    if (
-      files &&
-      files.length > 0 &&
-      files.some((file) => {
-        const mime = file.mimetype || '';
-        const isImage = mime.startsWith('image/');
-        return !isImage && !ALLOWED_MIME_TYPES.has(mime as AppMimeType);
-      })
-    ) {
-      return res.status(400).json({
-        error: 'Only image, PDF, Word, CSV, TXT, JSON files are supported',
-      });
-    }
-    const chatEngine = new ChatEngine({
-      ...baseEngineOptions,
-      llmModel: model,
-    });
-
-    const agent = await chatEngine.initialize();
-
-    const userMessage = await agent.createHumanMessage(message, files);
-    const thread_id = agent.createUUID();
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-
-    let fullResponse = '';
-
-    res.write(`data: ${JSON.stringify({ type: 'thread_id', thread_id })}\n\n`);
-
+router.post(
+  '/chat/start',
+  upload.array('file', 5),
+  async (req: AuthRequest, res) => {
     try {
-      if (agent.isStreaming) {
-        for await (const chunk of agent.streamMessage(thread_id, userMessage)) {
-          if (chunk.content) {
-            fullResponse += chunk.content;
-          }
-          res.write(
-            `data: ${JSON.stringify({ type: 'chunk', ...chunk, thread_id })}\n\n`
-          );
-        }
-      } else {
-        for await (const chunk of agent.runMessageChunk(
-          thread_id,
-          userMessage
-        )) {
-          if (chunk.content) {
-            fullResponse += chunk.content;
-          }
-          res.write(
-            `data: ${JSON.stringify({ type: 'chunk', ...chunk, thread_id })}\n\n`
-          );
-        }
+      const { message, model } = req.body;
+      const filesObj = req.files;
+      const files = Array.isArray(filesObj) ? filesObj : undefined;
+      const userId = req.userId!;
+
+      if (!message || typeof message !== 'string') {
+        return res.status(400).json({ error: 'Valid message required' });
       }
 
-      // Generate and store chat name after streaming completes
-      const chatName = await generateChatName(message, fullResponse);
-      await agent.updateChatMetadata(thread_id, chatName, true);
+      if (
+        files &&
+        files.length > 0 &&
+        files.some((file) => {
+          const mime = file.mimetype || '';
+          const isImage = mime.startsWith('image/');
+          return !isImage && !ALLOWED_MIME_TYPES.has(mime as AppMimeType);
+        })
+      ) {
+        return res.status(400).json({
+          error: 'Only image, PDF, Word, CSV, TXT, JSON files are supported',
+        });
+      }
+      const chatEngine = new ChatEngine({
+        ...getBaseEngineOptions(userId),
+        llmModel: model,
+      });
+
+      const agent = await chatEngine.initialize();
+
+      const userMessage = await agent.createHumanMessage(message, files);
+      const thread_id = agent.createUUID();
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+
+      let fullResponse = '';
 
       res.write(
-        `data: ${JSON.stringify({ type: 'done', thread_id, chat_name: chatName })}\n\n`
+        `data: ${JSON.stringify({ type: 'thread_id', thread_id })}\n\n`
       );
-      return res.end();
-    } catch (err) {
+
+      try {
+        if (agent.isStreaming) {
+          for await (const chunk of agent.streamMessage(
+            thread_id,
+            userMessage
+          )) {
+            if (chunk.content) {
+              fullResponse += chunk.content;
+            }
+            res.write(
+              `data: ${JSON.stringify({ type: 'chunk', ...chunk, thread_id })}\n\n`
+            );
+          }
+        } else {
+          for await (const chunk of agent.runMessageChunk(
+            thread_id,
+            userMessage
+          )) {
+            if (chunk.content) {
+              fullResponse += chunk.content;
+            }
+            res.write(
+              `data: ${JSON.stringify({ type: 'chunk', ...chunk, thread_id })}\n\n`
+            );
+          }
+        }
+
+        // Generate and store chat name after streaming completes
+        const chatName = await generateChatName(message, fullResponse);
+        await agent.updateChatMetadata(thread_id, chatName, true);
+
+        res.write(
+          `data: ${JSON.stringify({ type: 'done', thread_id, chat_name: chatName })}\n\n`
+        );
+        return res.end();
+      } catch (err) {
+        const safeError = serializeError(err);
+        console.error('Stream error in /chat/start:', safeError);
+        res.write(
+          `data: ${JSON.stringify({ type: 'error', error: safeError.message, thread_id })}\n\n`
+        );
+        return res.end();
+      }
+    } catch (err: any) {
       const safeError = serializeError(err);
-      console.error('Stream error in /chat/start:', safeError);
-      res.write(
-        `data: ${JSON.stringify({ type: 'error', error: safeError.message, thread_id })}\n\n`
-      );
-      return res.end();
+      console.error('Error in /chat/start:', safeError);
+      return res.status(500).json({ error: safeError.message });
     }
-  } catch (err: any) {
-    const safeError = serializeError(err);
-    console.error('Error in /chat/start:', safeError);
-    return res.status(500).json({ error: safeError.message });
   }
-});
+);
 
 // Continue existing chat
-router.post('/chat/continue', upload.array('file', 5), async (req, res) => {
-  const { thread_id, message, model } = req.body;
-
-  try {
-    const filesObj = req.files;
-    const files = Array.isArray(filesObj) ? filesObj : undefined;
-
-    if (!thread_id || !message || typeof message !== 'string') {
-      return res
-        .status(400)
-        .json({ error: 'thread_id and valid message required' });
-    }
-
-    if (
-      files &&
-      files.length > 0 &&
-      files.some((file) => {
-        const mime = file.mimetype || '';
-        const isImage = mime.startsWith('image/');
-        return !isImage && !ALLOWED_MIME_TYPES.has(mime as AppMimeType);
-      })
-    ) {
-      return res.status(400).json({
-        error: 'Only image, PDF, Word, CSV, TXT, JSON files are supported',
-      });
-    }
-    const chatEngine = new ChatEngine({
-      ...baseEngineOptions,
-      llmModel: model,
-    });
-
-    const agent = await chatEngine.initialize();
-
-    const userMessage = await agent.createHumanMessage(message, files);
-
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
+router.post(
+  '/chat/continue',
+  upload.array('file', 5),
+  async (req: AuthRequest, res) => {
+    const { thread_id, message, model } = req.body;
+    const userId = req.userId!;
 
     try {
-      if (agent.isStreaming) {
-        for await (const chunk of agent.streamMessage(thread_id, userMessage)) {
-          res.write(
-            `data: ${JSON.stringify({ type: 'chunk', ...chunk, thread_id })}\n\n`
-          );
-        }
-      } else {
-        for await (const chunk of agent.runMessageChunk(
-          thread_id,
-          userMessage
-        )) {
-          res.write(
-            `data: ${JSON.stringify({ type: 'chunk', ...chunk, thread_id })}\n\n`
-          );
-        }
+      const filesObj = req.files;
+      const files = Array.isArray(filesObj) ? filesObj : undefined;
+
+      if (!thread_id || !message || typeof message !== 'string') {
+        return res
+          .status(400)
+          .json({ error: 'thread_id and valid message required' });
       }
 
-      // Update chat metadata
-      await agent.updateChatMetadata(thread_id);
+      if (
+        files &&
+        files.length > 0 &&
+        files.some((file) => {
+          const mime = file.mimetype || '';
+          const isImage = mime.startsWith('image/');
+          return !isImage && !ALLOWED_MIME_TYPES.has(mime as AppMimeType);
+        })
+      ) {
+        return res.status(400).json({
+          error: 'Only image, PDF, Word, CSV, TXT, JSON files are supported',
+        });
+      }
+      const chatEngine = new ChatEngine({
+        ...getBaseEngineOptions(userId),
+        llmModel: model,
+      });
 
-      res.write(`data: ${JSON.stringify({ type: 'done', thread_id })}\n\n`);
-      return res.end();
-    } catch (err) {
+      const agent = await chatEngine.initialize();
+
+      const userMessage = await agent.createHumanMessage(message, files);
+
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+
+      try {
+        if (agent.isStreaming) {
+          for await (const chunk of agent.streamMessage(
+            thread_id,
+            userMessage
+          )) {
+            res.write(
+              `data: ${JSON.stringify({ type: 'chunk', ...chunk, thread_id })}\n\n`
+            );
+          }
+        } else {
+          for await (const chunk of agent.runMessageChunk(
+            thread_id,
+            userMessage
+          )) {
+            res.write(
+              `data: ${JSON.stringify({ type: 'chunk', ...chunk, thread_id })}\n\n`
+            );
+          }
+        }
+
+        // Update chat metadata
+        await agent.updateChatMetadata(thread_id);
+
+        res.write(`data: ${JSON.stringify({ type: 'done', thread_id })}\n\n`);
+        return res.end();
+      } catch (err) {
+        const safeError = serializeError(err);
+        console.error('Stream error in /chat/continue:', safeError);
+        res.write(
+          `data: ${JSON.stringify({ type: 'error', error: safeError.message, thread_id })}\n\n`
+        );
+        return res.end();
+      }
+    } catch (err: any) {
       const safeError = serializeError(err);
-      console.error('Stream error in /chat/continue:', safeError);
-      res.write(
-        `data: ${JSON.stringify({ type: 'error', error: safeError.message, thread_id })}\n\n`
-      );
-      return res.end();
+      console.error('Error in /chat/continue:', safeError);
+      return res.status(500).json({ error: safeError.message });
     }
-  } catch (err: any) {
-    const safeError = serializeError(err);
-    console.error('Error in /chat/continue:', safeError);
-    return res.status(500).json({ error: safeError.message });
   }
-});
+);
 
 // Get specific chat with messages
-router.get('/chat/:thread_id', async (req, res) => {
+router.get('/chat/:thread_id', async (req: AuthRequest, res) => {
   try {
     const { thread_id } = req.params;
+    const userId = req.userId!;
     if (!thread_id) {
       return res.status(400).json({ error: 'thread_id required' });
     }
 
-    const chatEngine = new ChatEngine(baseEngineOptions);
+    const chatEngine = new ChatEngine(getBaseEngineOptions(userId));
     const agent = await chatEngine.initialize();
     const threadDetails = await agent.getThreadDetails(thread_id);
 
@@ -209,9 +235,10 @@ router.get('/chat/:thread_id', async (req, res) => {
 });
 
 // Get all chats list
-router.get('/chats', async (_req, res) => {
+router.get('/chats', async (req: AuthRequest, res) => {
   try {
-    const chatEngine = new ChatEngine(baseEngineOptions);
+    const userId = req.userId!;
+    const chatEngine = new ChatEngine(getBaseEngineOptions(userId));
     const agent = await chatEngine.initialize();
     const chats = await agent.getThreadList();
 
@@ -224,10 +251,11 @@ router.get('/chats', async (_req, res) => {
 });
 
 // Update chat name
-router.patch('/chat/:thread_id/name', async (req, res) => {
+router.patch('/chat/:thread_id/name', async (req: AuthRequest, res) => {
   try {
     const { thread_id } = req.params;
     const { chat_name } = req.body;
+    const userId = req.userId!;
 
     if (!thread_id || !chat_name || typeof chat_name !== 'string') {
       return res
@@ -239,7 +267,7 @@ router.patch('/chat/:thread_id/name', async (req, res) => {
       return res.status(400).json({ error: 'Chat name too long' });
     }
 
-    const chatEngine = new ChatEngine(baseEngineOptions);
+    const chatEngine = new ChatEngine(getBaseEngineOptions(userId));
     const agent = await chatEngine.initialize();
 
     await agent.updateChatMetadata(thread_id, chat_name, false);
@@ -253,14 +281,15 @@ router.patch('/chat/:thread_id/name', async (req, res) => {
 });
 
 // Delete chat
-router.delete('/chat/:thread_id', async (req, res) => {
+router.delete('/chat/:thread_id', async (req: AuthRequest, res) => {
   try {
     const { thread_id } = req.params;
+    const userId = req.userId!;
     if (!thread_id) {
       return res.status(400).json({ error: 'thread_id required' });
     }
 
-    const chatEngine = new ChatEngine(baseEngineOptions);
+    const chatEngine = new ChatEngine(getBaseEngineOptions(userId));
     const agent = await chatEngine.initialize();
 
     await agent.deleteThread(thread_id);

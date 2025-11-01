@@ -3,3 +3,5 @@ dist
 .env
 packages/*/node_modules
 packages/backend/mock-output
+.claude
+.cursor

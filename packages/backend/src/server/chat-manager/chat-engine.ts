@@ -40,18 +40,26 @@ export class ChatEngine {
   private chatMetadataCollection: Collection<
     MongoDocument & ChatMetadata
   > | null = null;
+  private userId?: string;
 
   constructor(
     public params: {
       tools: any[];
       llmModel: ProviderManager['model'];
       mode?: Parameters<typeof initializeMongoDB>[0];
+      userId?: string;
     }
   ) {
-    const { llmModel = 'gpt-4o-mini', tools, mode = 'user-chat' } = params;
+    const {
+      llmModel = 'gpt-4o-mini',
+      tools,
+      mode = 'user-chat',
+      userId,
+    } = params;
     this.model = new ProviderManager(llmModel).provider;
     this.mode = mode;
     this.tools = tools;
+    this.userId = userId;
     this.checkpointer = null;
     this.chatMetadataCollection = null;
     this.isStreaming = this.model.streaming;
@@ -288,6 +296,7 @@ export class ChatEngine {
             created_at: now,
             updated_at: now,
             message_count: 1,
+            ...(this.userId && { user_id: this.userId }),
           },
         },
         { upsert: true }
@@ -312,11 +321,19 @@ export class ChatEngine {
   async getChatMetadata(
     thread_id: string
   ): Promise<ChatMetadata | null | undefined> {
-    return await this.chatMetadataCollection?.findOne({ thread_id });
+    const query: any = { thread_id };
+    if (this.userId) {
+      query.user_id = this.userId;
+    }
+    return await this.chatMetadataCollection?.findOne(query);
   }
 
   async getChatsMetadata(): Promise<ChatMetadata[] | null | undefined> {
-    return await this.chatMetadataCollection?.find({}).toArray();
+    const query: any = {};
+    if (this.userId) {
+      query.user_id = this.userId;
+    }
+    return await this.chatMetadataCollection?.find(query).toArray();
   }
 
   async createHumanMessage(
@@ -374,8 +391,12 @@ export class ChatEngine {
   }
 
   async deleteThread(thread_id: string) {
+    const query: any = { thread_id };
+    if (this.userId) {
+      query.user_id = this.userId;
+    }
     await this.checkpointer?.deleteThread(thread_id);
-    await this.chatMetadataCollection?.deleteOne({ thread_id });
+    await this.chatMetadataCollection?.deleteOne(query);
   }
 
   getTavityToolInfo(results: TavilySearchResponse['results']) {

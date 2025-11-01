@@ -1,4 +1,5 @@
 import { ChatLayout } from '@/components/chat-layout';
+import { ProtectedRoute } from '@/components/protected-route';
 import type { Route } from './+types/home';
 
 export function meta({}: Route.MetaArgs) {
@@ -8,6 +9,10 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-export default function ProjectPage() {
-  return <ChatLayout />;
+export default function ChatPage() {
+  return (
+    <ProtectedRoute>
+      <ChatLayout />
+    </ProtectedRoute>
+  );
 }
