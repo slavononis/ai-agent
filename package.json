@@ -6,11 +6,15 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently \"npm:dev:backend\" \"npm:dev:frontend\"",
     "dev:backend": "npm --workspace @monorepo/backend run dev",
     "dev:frontend": "npm --workspace @monorepo/frontend run dev",
-    "build": "npm --workspace @monorepo/frontend run build && npm --workspace @monorepo/backend run build",
-    "start": "node packages/backend/dist/index.js",
+    "dev": "concurrently \"npm:dev:backend\" \"npm:dev:frontend\"",
+    "build:backend": "npm --workspace @monorepo/backend run build",
+    "build:frontend": "npm --workspace @monorepo/frontend run build",
+    "build": "concurrently \"npm:build:backend\" \"npm:build:frontend\"",
+    "start:backend": "npm --workspace @monorepo/backend run start",
+    "start:frontend": "npm --workspace @monorepo/frontend run start:client",
+    "start": "concurrently \"npm:start:backend\" \"npm:start:frontend\"",
     "format": "prettier --write \"packages/**/*.{js,jsx,ts,tsx,json,css,md}\""
   },
   "devDependencies": {
